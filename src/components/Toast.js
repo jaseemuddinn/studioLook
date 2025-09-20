@@ -16,7 +16,7 @@ export const useToast = () => {
 export const ToastProvider = ({ children }) => {
     const [toasts, setToasts] = useState([])
 
-    const addToast = ({ title, description, type = 'info', duration = null }) => {
+    const addToast = ({ title, description, type = 'info', duration = 5000 }) => {
         const id = Math.random().toString(36).substr(2, 9)
         const newToast = {
             id,
@@ -27,6 +27,14 @@ export const ToastProvider = ({ children }) => {
             open: true
         }
         setToasts(prev => [...prev, newToast])
+        
+        // Auto-dismiss after duration
+        if (duration && duration > 0) {
+            setTimeout(() => {
+                removeToast(id)
+            }, duration)
+        }
+        
         return id
     }
 
@@ -35,10 +43,10 @@ export const ToastProvider = ({ children }) => {
     }
 
     const toast = {
-        success: (title, description) => addToast({ title, description, type: 'success' }),
-        error: (title, description) => addToast({ title, description, type: 'error' }),
-        warning: (title, description) => addToast({ title, description, type: 'warning' }),
-        info: (title, description) => addToast({ title, description, type: 'info' })
+        success: (title, description, duration = 4000) => addToast({ title, description, type: 'success', duration }),
+        error: (title, description, duration = 6000) => addToast({ title, description, type: 'error', duration }),
+        warning: (title, description, duration = 5000) => addToast({ title, description, type: 'warning', duration }),
+        info: (title, description, duration = 5000) => addToast({ title, description, type: 'info', duration })
     }
 
     return (

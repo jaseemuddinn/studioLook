@@ -24,6 +24,7 @@ export default function ProjectPage({ params }) {
     const [showUploadProgress, setShowUploadProgress] = useState(false)
     const [deleteConfirm, setDeleteConfirm] = useState({ type: null, item: null, isDeleting: false })
     const [deleteProjectConfirm, setDeleteProjectConfirm] = useState({ isDeleting: false, show: false })
+    const [deleteShareConfirm, setDeleteShareConfirm] = useState({ share: null, isDeleting: false, show: false })
     const [shares, setShares] = useState([])
     const [newShareForm, setNewShareForm] = useState({
         canSelect: true,
@@ -566,15 +567,19 @@ export default function ProjectPage({ params }) {
         }
     }
 
-    const deleteShare = async (shareId) => {
-        if (!shareId) {
-            console.error('Share ID is required for deletion')
+    const confirmDeleteShare = (share) => {
+        setDeleteShareConfirm({ share, isDeleting: false, show: true })
+    }
+
+    const deleteShare = async () => {
+        const { share } = deleteShareConfirm
+        if (!share) {
+            console.error('Share is required for deletion')
             return
         }
 
-        if (!confirm('Are you sure you want to delete this share link?')) {
-            return
-        }
+        const shareId = share._id?.toString() || share.id
+        setDeleteShareConfirm({ ...deleteShareConfirm, isDeleting: true })
 
         try {
             const response = await fetch(`/api/projects/${project.id}/shares/${shareId}`, {
@@ -583,18 +588,21 @@ export default function ProjectPage({ params }) {
 
             if (response.ok) {
                 // Remove the deleted share from the shares array
-                setShares(shares.filter(share => {
-                    const shareIdToCompare = share._id?.toString() || share.id
+                setShares(shares.filter(s => {
+                    const shareIdToCompare = s._id?.toString() || s.id
                     return shareIdToCompare !== shareId
                 }))
+                setDeleteShareConfirm({ share: null, isDeleting: false, show: false })
                 toast.success("Share Deleted", "Share link deleted successfully")
             } else {
                 const error = await response.json()
                 toast.error("Delete Failed", `Failed to delete share: ${error.message}`)
+                setDeleteShareConfirm({ ...deleteShareConfirm, isDeleting: false })
             }
         } catch (error) {
             console.error('Error deleting share:', error)
             toast.error("Delete Failed", "Failed to delete share. Please try again.")
+            setDeleteShareConfirm({ ...deleteShareConfirm, isDeleting: false })
         }
     }
 
@@ -965,6 +973,9 @@ export default function ProjectPage({ params }) {
                 <ShareProjectModal
                     project={project}
                     onClose={() => setShowShareModal(false)}
+                    onDeleteShare={confirmDeleteShare}
+                    shares={shares}
+                    onSharesUpdate={setShares}
                 />
             )}
 
@@ -1117,6 +1128,68 @@ export default function ProjectPage({ params }) {
                                     className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50"
                                 >
                                     {deleteProjectConfirm.isDeleting ? "Deleting..." : "Delete Project"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Share Confirmation Modal */}
+            {deleteShareConfirm.show && (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                    <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                        <div className="mt-3">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-medium text-gray-900">
+                                    Delete Share Link
+                                </h3>
+                                <button
+                                    onClick={() => setDeleteShareConfirm({ share: null, isDeleting: false, show: false })}
+                                    className="text-gray-400 hover:text-gray-600"
+                                    disabled={deleteShareConfirm.isDeleting}
+                                >
+                                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="mb-4">
+                                <p className="text-sm text-gray-700">
+                                    Are you sure you want to delete this share link?
+                                </p>
+                                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
+                                    <p className="text-sm text-red-800 font-medium mb-1">
+                                        ⚠️ This will permanently:
+                                    </p>
+                                    <ul className="text-sm text-red-700 ml-4 list-disc">
+                                        <li>Revoke access to the gallery for this share link</li>
+                                        <li>Make the share link unusable for future access</li>
+                                        <li>Remove any pending client access via this link</li>
+                                    </ul>
+                                    <p className="text-sm text-red-800 font-medium mt-2">
+                                        This action cannot be undone!
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end space-x-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setDeleteShareConfirm({ share: null, isDeleting: false, show: false })}
+                                    disabled={deleteShareConfirm.isDeleting}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={deleteShare}
+                                    disabled={deleteShareConfirm.isDeleting}
+                                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50"
+                                >
+                                    {deleteShareConfirm.isDeleting ? "Deleting..." : "Delete Share"}
                                 </button>
                             </div>
                         </div>
@@ -1835,7 +1908,8 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-function ShareProjectModal({ project, onClose }) {
+function ShareProjectModal({ project, onClose, onDeleteShare, shares: parentShares, onSharesUpdate }) {
+    const { toast } = useToast()
     const [shares, setShares] = useState([])
     const [isLoading, setIsLoading] = useState(true)
     const [isCreating, setIsCreating] = useState(false)
@@ -1857,6 +1931,14 @@ function ShareProjectModal({ project, onClose }) {
     useEffect(() => {
         fetchShares()
     }, [])
+
+    // Sync shares with parent component
+    useEffect(() => {
+        if (parentShares && parentShares.length >= 0) {
+            setShares(parentShares)
+            setIsLoading(false)
+        }
+    }, [parentShares])
 
     const fetchShares = async () => {
         try {
@@ -1893,7 +1975,9 @@ function ShareProjectModal({ project, onClose }) {
 
             if (response.ok) {
                 const newShare = await response.json()
-                setShares([newShare, ...shares])
+                const updatedShares = [newShare, ...shares]
+                setShares(updatedShares)
+                onSharesUpdate(updatedShares) // Update parent component
                 setNewShareForm({
                     email: "",
                     canSelect: true,
@@ -1901,9 +1985,14 @@ function ShareProjectModal({ project, onClose }) {
                     canDownload: false,
                     expiresAt: ""
                 })
+                toast.success("Share Created", "Share link created successfully!")
+            } else {
+                const error = await response.json()
+                toast.error("Creation Failed", `Failed to create share: ${error.message}`)
             }
         } catch (error) {
             console.error("Error creating share:", error)
+            toast.error("Creation Failed", "Failed to create share. Please try again.")
         } finally {
             setIsCreating(false)
         }
@@ -1942,8 +2031,6 @@ function ShareProjectModal({ project, onClose }) {
     }
 
     const deleteShare = async (shareId) => {
-        if (!confirm("Are you sure you want to delete this share link?")) return
-
         try {
             const response = await fetch(`/api/projects/${project.id}/shares/${shareId}`, {
                 method: "DELETE"
@@ -1951,9 +2038,14 @@ function ShareProjectModal({ project, onClose }) {
 
             if (response.ok) {
                 setShares(shares.filter(share => share.id !== shareId))
+                toast.success("Share Deleted", "Share link deleted successfully")
+            } else {
+                const error = await response.json()
+                toast.error("Delete Failed", `Failed to delete share: ${error.message}`)
             }
         } catch (error) {
             console.error("Error deleting share:", error)
+            toast.error("Delete Failed", "Failed to delete share. Please try again.")
         }
     }
 
@@ -2088,7 +2180,7 @@ function ShareProjectModal({ project, onClose }) {
                                                     Email
                                                 </button>
                                                 <button
-                                                    onClick={() => deleteShare(share._id?.toString() || share.id)}
+                                                    onClick={() => onDeleteShare(share)}
                                                     className="text-red-600 hover:text-red-500 text-sm px-2 py-1"
                                                 >
                                                     Delete
