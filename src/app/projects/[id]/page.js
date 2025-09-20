@@ -71,7 +71,7 @@ export default function ProjectPage({ params }) {
             if (response.ok) {
                 const data = await response.json()
                 setSelections(data.selections)
-                
+
                 // Calculate stats based on current folder's files
                 if (folderId && files.length > 0) {
                     calculateFolderSelectionStats(data.selections, files)
@@ -101,9 +101,32 @@ export default function ProjectPage({ params }) {
         }
     }, [project?.id, selectedFolder?.id])
 
+    // Effect to recalculate selection stats when files or selections change
+    useEffect(() => {
+        if (files.length > 0 && Object.keys(selections).length > 0) {
+            calculateFolderSelectionStats(selections, files)
+        } else if (files.length > 0) {
+            // If no selections data yet, show all as pending
+            setSelectionStats({
+                selected: 0,
+                rejected: 0,
+                pending: files.length,
+                total: files.length
+            })
+        } else {
+            // No files in folder
+            setSelectionStats({
+                selected: 0,
+                rejected: 0,
+                pending: 0,
+                total: 0
+            })
+        }
+    }, [files, selections])
+
     const calculateFolderSelectionStats = (allSelections, currentFiles) => {
         let selected = 0, rejected = 0, pending = 0
-        
+
         currentFiles.forEach(file => {
             const selectionStatus = getFileSelectionStatusFromData(file.id, allSelections)
             switch (selectionStatus.status) {
@@ -119,7 +142,7 @@ export default function ProjectPage({ params }) {
                     break
             }
         })
-        
+
         setSelectionStats({
             selected,
             rejected,
