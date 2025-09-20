@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState, use } from "react"
 import { useDropzone } from "react-dropzone"
 import Link from "next/link"
+import { useToast } from "@/components/Toast"
 
 export default function ProjectPage({ params }) {
     const resolvedParams = use(params)
     const { data: session, status } = useSession()
+    const { toast } = useToast()
     const router = useRouter()
     const [project, setProject] = useState(null)
     const [folders, setFolders] = useState([])
@@ -289,30 +291,65 @@ export default function ProjectPage({ params }) {
         }
     }
 
-    const onDrop = async (acceptedFiles) => {
+    const formatFileSize = (bytes) => {
+        if (bytes === 0) return '0 Bytes'
+        const k = 1024
+        const sizes = ['Bytes', 'KB', 'MB', 'GB']
+        const i = Math.floor(Math.log(bytes) / Math.log(k))
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+    }
+
+    const onDrop = async (acceptedFiles, rejectedFiles) => {
         if (!selectedFolder) {
-            alert("Please select a folder first")
+            toast.warning("No Folder Selected", "Please select a folder first")
             return
         }
 
         setUploading(true)
         setShowUploadProgress(true)
 
-        // Initialize progress for each file
-        const initialProgress = acceptedFiles.map((file, index) => ({
+        // Create initial progress for accepted files
+        const acceptedProgress = acceptedFiles.map((file, index) => ({
             id: `upload-${Date.now()}-${index}`,
             file,
             name: file.name,
             size: file.size,
             progress: 0,
-            status: 'uploading', // 'uploading', 'completed', 'error'
+            status: 'uploading',
             thumbnail: null,
             error: null
         }))
 
+        // Create progress entries for rejected files with errors
+        const rejectedProgress = rejectedFiles.map((rejection, index) => {
+            const errorMessages = rejection.errors.map(error => {
+                switch (error.code) {
+                    case 'file-too-large':
+                        return `File too large (${formatFileSize(rejection.file.size)}). Maximum size is 5MB.`
+                    case 'file-invalid-type':
+                        return `File type not supported.`
+                    default:
+                        return error.message
+                }
+            })
+
+            return {
+                id: `rejected-${Date.now()}-${index}`,
+                file: rejection.file,
+                name: rejection.file.name,
+                size: rejection.file.size,
+                progress: 0,
+                status: 'error',
+                thumbnail: null,
+                error: errorMessages.join(' ')
+            }
+        })
+
+        // Combine all progress items
+        const initialProgress = [...acceptedProgress, ...rejectedProgress]
         setUploadProgress(initialProgress)
 
-        // Generate thumbnails for images
+        // Generate thumbnails for images (both accepted and rejected for preview)
         initialProgress.forEach((item, index) => {
             if (item.file.type.startsWith('image/')) {
                 const reader = new FileReader()
@@ -325,10 +362,16 @@ export default function ProjectPage({ params }) {
             }
         })
 
+        // If there are no accepted files, just show the errors and stop
+        if (acceptedFiles.length === 0) {
+            setUploading(false)
+            return
+        }
+
         try {
-            // Upload files with progress tracking
+            // Upload only accepted files with progress tracking
             const uploadPromises = acceptedFiles.map(async (file, index) => {
-                const fileId = initialProgress[index].id
+                const fileId = acceptedProgress[index].id
                 const formData = new FormData()
                 formData.append("files", file)
                 formData.append("folderId", selectedFolder.id)
@@ -429,12 +472,6 @@ export default function ProjectPage({ params }) {
                 console.error('Failed uploads:', failedUploads)
             }
 
-            // Auto-hide progress panel after 3 seconds if all completed
-            setTimeout(() => {
-                setShowUploadProgress(false)
-                setUploadProgress([])
-            }, 3000)
-
         } catch (error) {
             console.error("Upload error:", error)
         } finally {
@@ -465,15 +502,15 @@ export default function ProjectPage({ params }) {
                 setDeleteConfirm({ type: null, item: null, isDeleting: false })
 
                 // Show success message
-                alert(`Folder "${folder.name}" and ${result.deletedFiles} files deleted successfully`)
+                toast.success("Folder Deleted", `Folder "${folder.name}" and ${result.deletedFiles} files deleted successfully`)
             } else {
                 const error = await response.json()
-                alert(`Failed to delete folder: ${error.error}`)
+                toast.error("Delete Failed", `Failed to delete folder: ${error.error}`)
                 setDeleteConfirm({ ...deleteConfirm, isDeleting: false })
             }
         } catch (error) {
             console.error('Error deleting folder:', error)
-            alert('Failed to delete folder. Please try again.')
+            toast.error("Delete Failed", "Failed to delete folder. Please try again.")
             setDeleteConfirm({ ...deleteConfirm, isDeleting: false })
         }
     }
@@ -492,12 +529,12 @@ export default function ProjectPage({ params }) {
                 setDeleteConfirm({ type: null, item: null, isDeleting: false })
             } else {
                 const error = await response.json()
-                alert(`Failed to delete file: ${error.error}`)
+                toast.error("Delete Failed", `Failed to delete file: ${error.error}`)
                 setDeleteConfirm({ ...deleteConfirm, isDeleting: false })
             }
         } catch (error) {
             console.error('Error deleting file:', error)
-            alert('Failed to delete file. Please try again.')
+            toast.error("Delete Failed", "Failed to delete file. Please try again.")
             setDeleteConfirm({ ...deleteConfirm, isDeleting: false })
         }
     }
@@ -519,12 +556,12 @@ export default function ProjectPage({ params }) {
                 // Note: We can't show an alert after redirect, but the user will see the project is gone
             } else {
                 const error = await response.json()
-                alert(`Failed to delete project: ${error.message}`)
+                toast.error("Delete Failed", `Failed to delete project: ${error.message}`)
                 setDeleteProjectConfirm({ isDeleting: false, show: true })
             }
         } catch (error) {
             console.error('Error deleting project:', error)
-            alert('Failed to delete project. Please try again.')
+            toast.error("Delete Failed", "Failed to delete project. Please try again.")
             setDeleteProjectConfirm({ isDeleting: false, show: true })
         }
     }
@@ -550,14 +587,14 @@ export default function ProjectPage({ params }) {
                     const shareIdToCompare = share._id?.toString() || share.id
                     return shareIdToCompare !== shareId
                 }))
-                alert('Share link deleted successfully')
+                toast.success("Share Deleted", "Share link deleted successfully")
             } else {
                 const error = await response.json()
-                alert(`Failed to delete share: ${error.message}`)
+                toast.error("Delete Failed", `Failed to delete share: ${error.message}`)
             }
         } catch (error) {
             console.error('Error deleting share:', error)
-            alert('Failed to delete share. Please try again.')
+            toast.error("Delete Failed", "Failed to delete share. Please try again.")
         }
     }
 
@@ -599,14 +636,14 @@ export default function ProjectPage({ params }) {
                     canDownload: false,
                     expiresAt: ''
                 })
-                alert('Share link created successfully!')
+                toast.success("Share Created", "Share link created successfully!")
             } else {
                 const error = await response.json()
-                alert(`Failed to create share: ${error.message}`)
+                toast.error("Creation Failed", `Failed to create share: ${error.message}`)
             }
         } catch (error) {
             console.error('Error creating share:', error)
-            alert('Failed to create share. Please try again.')
+            toast.error("Creation Failed", "Failed to create share. Please try again.")
         } finally {
             setIsCreating(false)
         }
@@ -618,7 +655,8 @@ export default function ProjectPage({ params }) {
             'image/*': ['.jpeg', '.jpg', '.png', '.gif'],
             'video/*': ['.mp4', '.mov', '.avi']
         },
-        multiple: true
+        multiple: true,
+        maxSize: 5 * 1024 * 1024 // 5MB in bytes
     })
 
     if (status === "loading" || isLoading) {
@@ -795,7 +833,7 @@ export default function ProjectPage({ params }) {
                                                 {isDragActive ? "Drop files here" : "Drag & drop files here"}
                                             </p>
                                             <p className="text-sm text-gray-500 mt-1">
-                                                or click to browse • JPG, PNG, GIF, MP4, MOV up to 50MB each
+                                                or click to browse • JPG, PNG, GIF, MP4, MOV up to 5MB each
                                             </p>
                                         </div>
                                         {uploading && (
@@ -1091,12 +1129,17 @@ export default function ProjectPage({ params }) {
 
 function UploadProgressPanel({ uploads, onClose }) {
     const completedCount = uploads.filter(u => u.status === 'completed').length
+    const errorCount = uploads.filter(u => u.status === 'error').length
+    const uploadingCount = uploads.filter(u => u.status === 'uploading').length
     const totalCount = uploads.length
-    const hasErrors = uploads.some(u => u.status === 'error')
-    const allCompleted = completedCount === totalCount
+    const hasErrors = errorCount > 0
+    const allCompleted = completedCount + errorCount === totalCount
 
     const overallProgress = uploads.length > 0
-        ? Math.round(uploads.reduce((sum, upload) => sum + upload.progress, 0) / uploads.length)
+        ? Math.round(uploads.reduce((sum, upload) => {
+            // Count error files as "completed" for progress calculation
+            return sum + (upload.status === 'error' ? 100 : upload.progress)
+        }, 0) / uploads.length)
         : 0
 
     const formatFileSize = (bytes) => {
@@ -1107,6 +1150,34 @@ function UploadProgressPanel({ uploads, onClose }) {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
     }
 
+    const getHeaderTitle = () => {
+        if (allCompleted) {
+            if (errorCount > 0 && completedCount > 0) {
+                return 'Upload Completed with Issues'
+            } else if (errorCount === totalCount) {
+                return 'Upload Failed'
+            } else {
+                return 'Upload Complete'
+            }
+        } else {
+            return 'Uploading Files'
+        }
+    }
+
+    const getStatusSummary = () => {
+        if (allCompleted) {
+            if (errorCount > 0 && completedCount > 0) {
+                return `${completedCount} successful, ${errorCount} failed`
+            } else if (errorCount === totalCount) {
+                return `${errorCount}/${totalCount} failed`
+            } else {
+                return `${completedCount}/${totalCount} files`
+            }
+        } else {
+            return `${completedCount}/${totalCount} files`
+        }
+    }
+
     return (
         <div className="fixed bottom-4 right-4 w-96 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 max-h-96 overflow-hidden">
             {/* Header */}
@@ -1115,22 +1186,30 @@ function UploadProgressPanel({ uploads, onClose }) {
                     <div className="flex items-center space-x-2">
                         <div className="flex items-center space-x-1">
                             {allCompleted ? (
-                                <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                </svg>
-                            ) : hasErrors ? (
-                                <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                </svg>
+                                hasErrors ? (
+                                    completedCount > 0 ? (
+                                        <svg className="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                    ) : (
+                                        <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                    )
+                                ) : (
+                                    <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                    </svg>
+                                )
                             ) : (
                                 <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                             )}
                             <h3 className="text-sm font-medium text-gray-900">
-                                {allCompleted ? 'Upload Complete' : hasErrors ? 'Upload Issues' : 'Uploading Files'}
+                                {getHeaderTitle()}
                             </h3>
                         </div>
                         <span className="text-xs text-gray-500">
-                            {completedCount}/{totalCount} files
+                            {getStatusSummary()}
                         </span>
                     </div>
                     <button
@@ -1152,11 +1231,24 @@ function UploadProgressPanel({ uploads, onClose }) {
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-1.5">
                             <div
-                                className={`h-1.5 rounded-full transition-all duration-300 ${hasErrors ? 'bg-red-500' : 'bg-blue-500'
+                                className={`h-1.5 rounded-full transition-all duration-300 ${hasErrors ? 'bg-yellow-500' : 'bg-blue-500'
                                     }`}
                                 style={{ width: `${overallProgress}%` }}
                             ></div>
                         </div>
+                    </div>
+                )}
+
+                {/* Summary when completed */}
+                {allCompleted && (completedCount > 0 || errorCount > 0) && (
+                    <div className="mt-2 text-xs text-gray-600">
+                        {completedCount > 0 && (
+                            <span className="text-green-600">✓ {completedCount} uploaded</span>
+                        )}
+                        {completedCount > 0 && errorCount > 0 && <span className="mx-2">•</span>}
+                        {errorCount > 0 && (
+                            <span className="text-red-600">✗ {errorCount} failed</span>
+                        )}
                     </div>
                 )}
             </div>
@@ -1212,12 +1304,16 @@ function UploadProgressPanel({ uploads, onClose }) {
                                     <p className="text-xs text-gray-500">
                                         {formatFileSize(upload.size)}
                                     </p>
-                                    {upload.error && (
-                                        <p className="text-xs text-red-600">
+                                </div>
+
+                                {/* Error Message */}
+                                {upload.error && (
+                                    <div className="mt-1">
+                                        <p className="text-xs text-red-600 font-medium">
                                             {upload.error}
                                         </p>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
 
                                 {/* Individual Progress Bar */}
                                 {upload.status === 'uploading' && (
@@ -1227,6 +1323,24 @@ function UploadProgressPanel({ uploads, onClose }) {
                                                 className="h-1 bg-blue-500 rounded-full transition-all duration-300"
                                                 style={{ width: `${upload.progress}%` }}
                                             ></div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Error Progress Bar */}
+                                {upload.status === 'error' && (
+                                    <div className="mt-2">
+                                        <div className="w-full bg-gray-200 rounded-full h-1">
+                                            <div className="h-1 bg-red-500 rounded-full w-full"></div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Completed Progress Bar */}
+                                {upload.status === 'completed' && (
+                                    <div className="mt-2">
+                                        <div className="w-full bg-gray-200 rounded-full h-1">
+                                            <div className="h-1 bg-green-500 rounded-full w-full"></div>
                                         </div>
                                     </div>
                                 )}
@@ -1797,7 +1911,7 @@ function ShareProjectModal({ project, onClose }) {
 
     const copyToClipboard = (url) => {
         navigator.clipboard.writeText(url)
-        alert("Link copied to clipboard!")
+        toast.success("Copied!", "Link copied to clipboard!")
     }
 
     const sendEmailInvitation = async (e) => {
@@ -1815,13 +1929,13 @@ function ShareProjectModal({ project, onClose }) {
 
             if (response.ok) {
                 const result = await response.json()
-                alert(result.message)
+                toast.success("Invitation Sent", result.message)
                 setShowEmailForm(false)
                 setEmailForm({ email: "", message: "", shareToken: "" })
             }
         } catch (error) {
             console.error("Error sending invitation:", error)
-            alert("Failed to send invitation")
+            toast.error("Send Failed", "Failed to send invitation")
         } finally {
             setIsSendingEmail(false)
         }

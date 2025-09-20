@@ -49,6 +49,17 @@ export async function POST(request) {
         for (const file of files) {
             if (!file || typeof file === "string") continue
 
+            // Validate file size (5MB limit)
+            const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB in bytes
+            if (file.size > MAX_FILE_SIZE) {
+                return NextResponse.json(
+                    {
+                        message: `File "${file.name}" is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maximum size is 5MB.`
+                    },
+                    { status: 400 }
+                )
+            }
+
             const bytes = await file.arrayBuffer()
             const buffer = Buffer.from(bytes)
 
