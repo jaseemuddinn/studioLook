@@ -5,6 +5,7 @@ import Image from "next/image"
 
 export default function GalleryView({
     files,
+    folders = [],
     selections = {},
     onSelectionChange,
     onComment,
@@ -17,8 +18,32 @@ export default function GalleryView({
     const [searchTerm, setSearchTerm] = useState("")
     const [filterStatus, setFilterStatus] = useState("all")
     const [sortBy, setSortBy] = useState("date")
+    const [expandedFolders, setExpandedFolders] = useState({})
 
-    const filteredFiles = files.filter(file => {
+    // Initialize expanded folders (all expanded by default)
+    useEffect(() => {
+        if (folders.length > 0) {
+            const initialExpanded = {}
+            folders.forEach(folder => {
+                initialExpanded[folder.id] = true
+            })
+            setExpandedFolders(initialExpanded)
+        }
+    }, [folders])
+
+    const toggleFolder = (folderId) => {
+        setExpandedFolders(prev => ({
+            ...prev,
+            [folderId]: !prev[folderId]
+        }))
+    }
+
+    // Get all files for search and filtering (flatten from folders)
+    const allFiles = folders.length > 0
+        ? folders.reduce((acc, folder) => [...acc, ...folder.files], [])
+        : files // Fallback to direct files array
+
+    const filteredFiles = allFiles.filter(file => {
         const matchesSearch = file.originalName.toLowerCase().includes(searchTerm.toLowerCase())
 
         if (filterStatus === "all") return matchesSearch
@@ -125,7 +150,7 @@ export default function GalleryView({
                 {isClient && (
                     <div className="mt-4 flex gap-4 text-sm">
                         <span className="text-gray-600">
-                            Total: {files.length} files
+                            Total: {allFiles.length} files
                         </span>
                         <span className="text-green-600">
                             Selected: {Object.values(selections).filter(s => s.status === "SELECTED").length}
@@ -135,35 +160,136 @@ export default function GalleryView({
                         </span>
                         <span className="text-gray-600">
                             Pending: {Object.values(selections).filter(s => s.status === "PENDING").length +
-                                (files.length - Object.keys(selections).length)}
+                                (allFiles.length - Object.keys(selections).length)}
                         </span>
                     </div>
                 )}
             </div>
 
-            {/* Gallery Grid */}
-            <div className="bg-white rounded-lg shadow p-6">
-                {sortedFiles.length === 0 ? (
-                    <div className="text-center py-12">
-                        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <h3 className="mt-2 text-sm font-medium text-gray-900">No files found</h3>
-                        <p className="mt-1 text-sm text-gray-500">
-                            {searchTerm ? "Try adjusting your search terms" : "No files match the current filters"}
-                        </p>
-                    </div>
+            {/* Gallery Grid - Folder-wise or regular */}
+            <div className="space-y-6">
+                {folders.length > 0 ? (
+                    // Folder-wise view
+                    folders.map((folder) => {
+                        const folderFiles = folder.files.filter(file => {
+                            const matchesSearch = file.originalName.toLowerCase().includes(searchTerm.toLowerCase())
+
+                            if (filterStatus === "all") return matchesSearch
+
+                            const selection = selections[file.id]
+                            const status = selection?.status || "PENDING"
+
+                            return matchesSearch && status.toLowerCase() === filterStatus.toLowerCase()
+                        })
+
+                        // Sort folder files
+                        const sortedFolderFiles = [...folderFiles].sort((a, b) => {
+                            switch (sortBy) {
+                                case "name":
+                                    return a.originalName.localeCompare(b.originalName)
+                                case "size":
+                                    return b.size - a.size
+                                case "date":
+                                default:
+                                    return new Date(b.createdAt) - new Date(a.createdAt)
+                            }
+                        })
+
+                        // Don't render folder if no files match filters
+                        if (sortedFolderFiles.length === 0 && (searchTerm || filterStatus !== "all")) {
+                            return null
+                        }
+
+                        return (
+                            <div key={folder.id} className="bg-white rounded-lg shadow">
+                                {/* Folder Header */}
+                                <div
+                                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 border-b border-gray-200"
+                                    onClick={() => toggleFolder(folder.id)}
+                                >
+                                    <div className="flex items-center space-x-3">
+                                        <svg
+                                            className={`w-5 h-5 text-gray-500 transition-transform duration-200 ${expandedFolders[folder.id] ? 'rotate-90' : ''
+                                                }`}
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                        <svg className="w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
+                                        </svg>
+                                        <h3 className="text-lg font-semibold text-gray-900">{folder.name}</h3>
+                                    </div>
+                                    <div className="flex items-center space-x-4 text-sm text-gray-600">
+                                        <span>{sortedFolderFiles.length} files</span>
+                                        {isClient && (
+                                            <>
+                                                <span className="text-green-600">
+                                                    {sortedFolderFiles.filter(f => selections[f.id]?.status === "SELECTED").length} selected
+                                                </span>
+                                                <span className="text-red-600">
+                                                    {sortedFolderFiles.filter(f => selections[f.id]?.status === "REJECTED").length} rejected
+                                                </span>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Folder Content */}
+                                {expandedFolders[folder.id] && (
+                                    <div className="p-6">
+                                        {sortedFolderFiles.length === 0 ? (
+                                            <div className="text-center py-8">
+                                                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                </svg>
+                                                <h3 className="mt-2 text-sm font-medium text-gray-900">No files in this folder</h3>
+                                            </div>
+                                        ) : (
+                                            <MasonryGallery
+                                                files={sortedFolderFiles}
+                                                onImageClick={handleImageClick}
+                                                onSelectionToggle={handleSelectionToggle}
+                                                getSelectionStatus={getSelectionStatus}
+                                                getStatusColor={getStatusColor}
+                                                isClient={isClient}
+                                                permissions={permissions}
+                                                shareToken={shareToken}
+                                            />
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })
                 ) : (
-                    <MasonryGallery
-                        files={sortedFiles}
-                        onImageClick={handleImageClick}
-                        onSelectionToggle={handleSelectionToggle}
-                        getSelectionStatus={getSelectionStatus}
-                        getStatusColor={getStatusColor}
-                        isClient={isClient}
-                        permissions={permissions}
-                        shareToken={shareToken}
-                    />
+                    // Fallback to regular view if no folders
+                    <div className="bg-white rounded-lg shadow p-6">
+                        {sortedFiles.length === 0 ? (
+                            <div className="text-center py-12">
+                                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <h3 className="mt-2 text-sm font-medium text-gray-900">No files found</h3>
+                                <p className="mt-1 text-sm text-gray-500">
+                                    {searchTerm ? "Try adjusting your search terms" : "No files match the current filters"}
+                                </p>
+                            </div>
+                        ) : (
+                            <MasonryGallery
+                                files={sortedFiles}
+                                onImageClick={handleImageClick}
+                                onSelectionToggle={handleSelectionToggle}
+                                getSelectionStatus={getSelectionStatus}
+                                getStatusColor={getStatusColor}
+                                isClient={isClient}
+                                permissions={permissions}
+                                shareToken={shareToken}
+                            />
+                        )}
+                    </div>
                 )}
             </div>
 

@@ -78,7 +78,8 @@ export async function GET(request, { params }) {
 
         return NextResponse.json({
             project: projectWithDetails,
-            files: allFiles,
+            folders: foldersWithFiles,
+            files: allFiles, // Keep for backward compatibility
             permissions: {
                 canSelect: projectShare.canSelect,
                 canComment: projectShare.canComment,

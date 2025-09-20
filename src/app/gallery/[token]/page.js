@@ -11,7 +11,8 @@ export default function SharedGallery({ params }) {
     const { data: session, status } = useSession()
     const router = useRouter()
     const [project, setProject] = useState(null)
-    const [files, setFiles] = useState([])
+    const [folders, setFolders] = useState([])
+    const [files, setFiles] = useState([]) // Keep for backward compatibility
     const [selections, setSelections] = useState({})
     const [permissions, setPermissions] = useState({})
     const [isLoading, setIsLoading] = useState(true)
@@ -43,7 +44,8 @@ export default function SharedGallery({ params }) {
             if (response.ok) {
                 const data = await response.json()
                 setProject(data.project)
-                setFiles(data.files)
+                setFolders(data.folders || [])
+                setFiles(data.files || []) // Keep for backward compatibility
                 setPermissions(data.permissions)
             } else {
                 setError("Gallery not found or access denied")
@@ -357,6 +359,7 @@ export default function SharedGallery({ params }) {
 
                 <GalleryView
                     files={files}
+                    folders={folders}
                     selections={selections}
                     onSelectionChange={handleSelectionChange}
                     onComment={handleComment}

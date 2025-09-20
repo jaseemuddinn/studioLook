@@ -18,6 +18,8 @@ export default function ProjectPage({ params }) {
     const [showNewFolderModal, setShowNewFolderModal] = useState(false)
     const [showShareModal, setShowShareModal] = useState(false)
     const [uploading, setUploading] = useState(false)
+    const [uploadProgress, setUploadProgress] = useState([])
+    const [showUploadProgress, setShowUploadProgress] = useState(false)
     const [deleteConfirm, setDeleteConfirm] = useState({ type: null, item: null, isDeleting: false })
     const [deleteProjectConfirm, setDeleteProjectConfirm] = useState({ isDeleting: false, show: false })
     const [shares, setShares] = useState([])
@@ -294,28 +296,147 @@ export default function ProjectPage({ params }) {
         }
 
         setUploading(true)
-        const formData = new FormData()
+        setShowUploadProgress(true)
 
-        acceptedFiles.forEach((file) => {
-            formData.append("files", file)
+        // Initialize progress for each file
+        const initialProgress = acceptedFiles.map((file, index) => ({
+            id: `upload-${Date.now()}-${index}`,
+            file,
+            name: file.name,
+            size: file.size,
+            progress: 0,
+            status: 'uploading', // 'uploading', 'completed', 'error'
+            thumbnail: null,
+            error: null
+        }))
+
+        setUploadProgress(initialProgress)
+
+        // Generate thumbnails for images
+        initialProgress.forEach((item, index) => {
+            if (item.file.type.startsWith('image/')) {
+                const reader = new FileReader()
+                reader.onload = (e) => {
+                    setUploadProgress(prev =>
+                        prev.map(p => p.id === item.id ? { ...p, thumbnail: e.target.result } : p)
+                    )
+                }
+                reader.readAsDataURL(item.file)
+            }
         })
-        formData.append("folderId", selectedFolder.id)
 
         try {
-            const response = await fetch("/api/upload", {
-                method: "POST",
-                body: formData
+            // Upload files with progress tracking
+            const uploadPromises = acceptedFiles.map(async (file, index) => {
+                const fileId = initialProgress[index].id
+                const formData = new FormData()
+                formData.append("files", file)
+                formData.append("folderId", selectedFolder.id)
+
+                const xhr = new XMLHttpRequest()
+
+                return new Promise((resolve, reject) => {
+                    xhr.upload.addEventListener('progress', (e) => {
+                        if (e.lengthComputable) {
+                            const percentComplete = Math.round((e.loaded / e.total) * 100)
+                            setUploadProgress(prev =>
+                                prev.map(p =>
+                                    p.id === fileId ? { ...p, progress: percentComplete } : p
+                                )
+                            )
+                        }
+                    })
+
+                    xhr.addEventListener('load', () => {
+                        console.log(`Upload response for ${file.name}:`, {
+                            status: xhr.status,
+                            statusText: xhr.statusText,
+                            responseText: xhr.responseText,
+                            headers: xhr.getAllResponseHeaders()
+                        })
+
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            try {
+                                const result = xhr.responseText ? JSON.parse(xhr.responseText) : []
+                                setUploadProgress(prev =>
+                                    prev.map(p =>
+                                        p.id === fileId ? { ...p, status: 'completed', progress: 100 } : p
+                                    )
+                                )
+                                resolve(result)
+                            } catch (parseError) {
+                                console.error('Failed to parse response:', parseError, xhr.responseText)
+                                setUploadProgress(prev =>
+                                    prev.map(p =>
+                                        p.id === fileId ? {
+                                            ...p,
+                                            status: 'error',
+                                            error: 'Invalid server response'
+                                        } : p
+                                    )
+                                )
+                                reject(new Error('Invalid server response'))
+                            }
+                        } else {
+                            console.error('Upload failed with status:', xhr.status, xhr.responseText)
+                            setUploadProgress(prev =>
+                                prev.map(p =>
+                                    p.id === fileId ? {
+                                        ...p,
+                                        status: 'error',
+                                        error: `Server error: ${xhr.status}`
+                                    } : p
+                                )
+                            )
+                            reject(new Error(`Upload failed with status: ${xhr.status}`))
+                        }
+                    })
+
+                    xhr.addEventListener('error', () => {
+                        setUploadProgress(prev =>
+                            prev.map(p =>
+                                p.id === fileId ? {
+                                    ...p,
+                                    status: 'error',
+                                    error: 'Network error'
+                                } : p
+                            )
+                        )
+                        reject(new Error('Network error'))
+                    })
+
+                    xhr.open('POST', '/api/upload')
+                    xhr.send(formData)
+                })
             })
 
-            if (response.ok) {
-                const uploadedFiles = await response.json()
-                setFiles([...files, ...uploadedFiles])
-            } else {
-                alert("Upload failed. Please try again.")
+            const results = await Promise.allSettled(uploadPromises)
+            const successfulUploads = results
+                .filter(result => result.status === 'fulfilled')
+                .map(result => result.value)
+                .flat()
+
+            console.log('Upload results:', results)
+            console.log('Successful uploads:', successfulUploads)
+
+            if (successfulUploads.length > 0) {
+                setFiles([...files, ...successfulUploads])
             }
+
+            // Check if there were any errors
+            const failedUploads = results.filter(result => result.status === 'rejected')
+            if (failedUploads.length > 0) {
+                console.error('Failed uploads:', failedUploads)
+            }
+
+            // Auto-hide progress panel after 3 seconds if all completed
+            setTimeout(() => {
+                setShowUploadProgress(false)
+                setUploadProgress([])
+            }, 3000)
+
         } catch (error) {
             console.error("Upload error:", error)
-            alert("Upload failed. Please try again.")
         } finally {
             setUploading(false)
         }
@@ -774,6 +895,17 @@ export default function ProjectPage({ params }) {
                 </div>
             </div>
 
+            {/* Upload Progress Panel */}
+            {showUploadProgress && uploadProgress.length > 0 && (
+                <UploadProgressPanel
+                    uploads={uploadProgress}
+                    onClose={() => {
+                        setShowUploadProgress(false)
+                        setUploadProgress([])
+                    }}
+                />
+            )}
+
             {/* Image Modal */}
             {showImageModal && selectedFile && (
                 <ImageModal
@@ -953,6 +1085,156 @@ export default function ProjectPage({ params }) {
                     </div>
                 </div>
             )}
+        </div>
+    )
+}
+
+function UploadProgressPanel({ uploads, onClose }) {
+    const completedCount = uploads.filter(u => u.status === 'completed').length
+    const totalCount = uploads.length
+    const hasErrors = uploads.some(u => u.status === 'error')
+    const allCompleted = completedCount === totalCount
+
+    const overallProgress = uploads.length > 0
+        ? Math.round(uploads.reduce((sum, upload) => sum + upload.progress, 0) / uploads.length)
+        : 0
+
+    const formatFileSize = (bytes) => {
+        if (bytes === 0) return '0 Bytes'
+        const k = 1024
+        const sizes = ['Bytes', 'KB', 'MB', 'GB']
+        const i = Math.floor(Math.log(bytes) / Math.log(k))
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+    }
+
+    return (
+        <div className="fixed bottom-4 right-4 w-96 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 max-h-96 overflow-hidden">
+            {/* Header */}
+            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-1">
+                            {allCompleted ? (
+                                <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                            ) : hasErrors ? (
+                                <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                            ) : (
+                                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                            )}
+                            <h3 className="text-sm font-medium text-gray-900">
+                                {allCompleted ? 'Upload Complete' : hasErrors ? 'Upload Issues' : 'Uploading Files'}
+                            </h3>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                            {completedCount}/{totalCount} files
+                        </span>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+
+                {/* Overall Progress Bar */}
+                {!allCompleted && (
+                    <div className="mt-2">
+                        <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                            <span>Overall Progress</span>
+                            <span>{overallProgress}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                            <div
+                                className={`h-1.5 rounded-full transition-all duration-300 ${hasErrors ? 'bg-red-500' : 'bg-blue-500'
+                                    }`}
+                                style={{ width: `${overallProgress}%` }}
+                            ></div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* File List */}
+            <div className="max-h-64 overflow-y-auto">
+                {uploads.map((upload) => (
+                    <div key={upload.id} className="px-4 py-3 border-b border-gray-100 last:border-b-0">
+                        <div className="flex items-center space-x-3">
+                            {/* Thumbnail */}
+                            <div className="flex-shrink-0 w-10 h-10 bg-gray-100 rounded-lg overflow-hidden">
+                                {upload.thumbnail ? (
+                                    <img
+                                        src={upload.thumbnail}
+                                        alt={upload.name}
+                                        className="w-full h-full object-cover"
+                                    />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                        <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                                        </svg>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* File Info */}
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm font-medium text-gray-900 truncate">
+                                        {upload.name}
+                                    </p>
+                                    <div className="flex items-center space-x-1">
+                                        {upload.status === 'completed' && (
+                                            <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                            </svg>
+                                        )}
+                                        {upload.status === 'error' && (
+                                            <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                            </svg>
+                                        )}
+                                        <span className="text-xs text-gray-500">
+                                            {upload.status === 'completed' ? 'Done' :
+                                                upload.status === 'error' ? 'Failed' :
+                                                    `${upload.progress}%`}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-between mt-1">
+                                    <p className="text-xs text-gray-500">
+                                        {formatFileSize(upload.size)}
+                                    </p>
+                                    {upload.error && (
+                                        <p className="text-xs text-red-600">
+                                            {upload.error}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* Individual Progress Bar */}
+                                {upload.status === 'uploading' && (
+                                    <div className="mt-2">
+                                        <div className="w-full bg-gray-200 rounded-full h-1">
+                                            <div
+                                                className="h-1 bg-blue-500 rounded-full transition-all duration-300"
+                                                style={{ width: `${upload.progress}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     )
 }
