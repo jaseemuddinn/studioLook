@@ -26,12 +26,7 @@ export async function POST(request, { params }) {
             return NextResponse.json({ message: "Gallery access has expired" }, { status: 403 })
         }
 
-        // console.log(`Original ProjectShare for token ${token}:`, {
-        //     id: projectShare._id,
-        //     email: projectShare.email,
-        //     userId: projectShare.userId,
-        //     hasUserId: !!projectShare.userId
-        // })
+        console.log(`Join attempt by user ${session.user.id} for token ${token}`)
 
         // Check if user already has access to this gallery (by email or userId)
         const existingAccess = await ProjectShare.findOne({
@@ -43,6 +38,8 @@ export async function POST(request, { params }) {
         })
 
         if (existingAccess) {
+            console.log(`User ${session.user.id} already has access via existing share ${existingAccess._id}`)
+
             // If they have access by email but no userId, update to add userId
             if (!existingAccess.userId) {
                 await ProjectShare.findByIdAndUpdate(existingAccess._id, {
@@ -58,7 +55,26 @@ export async function POST(request, { params }) {
             })
         }
 
-        // If no existing access, create a new share record
+        // For public galleries (where original share has no email), update the original share
+        // instead of creating a new one
+        if (!projectShare.email && !projectShare.userId) {
+            console.log(`Updating public gallery share ${projectShare._id} for user ${session.user.id}`)
+
+            await ProjectShare.findByIdAndUpdate(projectShare._id, {
+                email: session.user.email,
+                userId: session.user.id,
+                joinedAt: new Date()
+            })
+
+            return NextResponse.json({
+                message: "Successfully joined gallery",
+                joined: true
+            })
+        }
+
+        // If the original share is tied to a specific email/user, create a new share record
+        console.log(`Creating new share record for user ${session.user.id}`)
+
         const newShare = await ProjectShare.create({
             token: projectShare.token,
             projectId: projectShare.projectId,
@@ -69,9 +85,8 @@ export async function POST(request, { params }) {
             canComment: projectShare.canComment,
             canDownload: projectShare.canDownload
         })
-        console.log(`Created new share record for user ${session.user.id}:`, newShare._id)
 
-        console.log(`User ${session.user.id} successfully joined gallery with token ${token}`)
+        console.log(`Created new share record ${newShare._id} for user ${session.user.id}`)
 
         return NextResponse.json({
             message: "Successfully joined gallery",
@@ -80,6 +95,11 @@ export async function POST(request, { params }) {
 
     } catch (error) {
         console.error("Error joining gallery:", error)
+        console.error("Error details:", {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+        })
         return NextResponse.json(
             { message: "Internal server error" },
             { status: 500 }
