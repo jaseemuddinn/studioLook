@@ -2,7 +2,7 @@
 const nextConfig = {
     // Reduce warnings for NextAuth.js with MongoDB
     serverExternalPackages: ['@auth/mongodb-adapter', 'mongodb'],
-    
+
     // ESLint configuration for builds
     eslint: {
         // Warning: This allows production builds to successfully complete even if

@@ -63,7 +63,7 @@ export default function ProjectPage({ params }) {
         }
     }
 
-    const fetchSelections = async () => {
+    const fetchSelections = async (folderId = null) => {
         if (!project?.id) return
 
         try {
@@ -71,7 +71,13 @@ export default function ProjectPage({ params }) {
             if (response.ok) {
                 const data = await response.json()
                 setSelections(data.selections)
-                setSelectionStats(data.stats)
+                
+                // Calculate stats based on current folder's files
+                if (folderId && files.length > 0) {
+                    calculateFolderSelectionStats(data.selections, files)
+                } else {
+                    setSelectionStats(data.stats)
+                }
             } else {
                 console.error('Failed to fetch selections:', response.statusText)
             }
@@ -91,9 +97,74 @@ export default function ProjectPage({ params }) {
     useEffect(() => {
         if (project?.id) {
             fetchShares()
-            fetchSelections()
+            fetchSelections(selectedFolder?.id)
         }
-    }, [project?.id])
+    }, [project?.id, selectedFolder?.id])
+
+    const calculateFolderSelectionStats = (allSelections, currentFiles) => {
+        let selected = 0, rejected = 0, pending = 0
+        
+        currentFiles.forEach(file => {
+            const selectionStatus = getFileSelectionStatusFromData(file.id, allSelections)
+            switch (selectionStatus.status) {
+                case 'SELECTED':
+                    selected++
+                    break
+                case 'REJECTED':
+                    rejected++
+                    break
+                case 'PENDING':
+                default:
+                    pending++
+                    break
+            }
+        })
+        
+        setSelectionStats({
+            selected,
+            rejected,
+            pending,
+            total: currentFiles.length
+        })
+    }
+
+    const getFileSelectionStatusFromData = (fileId, allSelections) => {
+        const fileSelections = allSelections[fileId]
+        if (!fileSelections || fileSelections.length === 0) {
+            return { status: 'PENDING', count: 0, users: [] }
+        }
+
+        // Get the most recent selection for each user
+        const userSelections = {}
+        fileSelections.forEach(selection => {
+            const userId = selection.user._id
+            if (!userSelections[userId] || new Date(selection.updatedAt) > new Date(userSelections[userId].updatedAt)) {
+                userSelections[userId] = selection
+            }
+        })
+
+        const currentSelections = Object.values(userSelections)
+        const selectedCount = currentSelections.filter(s => s.status === 'SELECTED').length
+        const rejectedCount = currentSelections.filter(s => s.status === 'REJECTED').length
+
+        // Determine overall status
+        let overallStatus = 'PENDING'
+        if (selectedCount > 0 && rejectedCount === 0) {
+            overallStatus = 'SELECTED'
+        } else if (rejectedCount > 0 && selectedCount === 0) {
+            overallStatus = 'REJECTED'
+        } else if (selectedCount > 0 && rejectedCount > 0) {
+            overallStatus = 'MIXED' // Some users selected, some rejected
+        }
+
+        return {
+            status: overallStatus,
+            count: currentSelections.length,
+            users: currentSelections,
+            selectedCount,
+            rejectedCount
+        }
+    }
 
     const getFileSelectionStatus = (fileId) => {
         const fileSelections = selections[fileId]
@@ -183,6 +254,10 @@ export default function ProjectPage({ params }) {
             if (response.ok) {
                 const data = await response.json()
                 setFiles(data)
+                // Recalculate selection stats for this folder's files
+                if (Object.keys(selections).length > 0) {
+                    calculateFolderSelectionStats(selections, data)
+                }
             }
         } catch (error) {
             console.error("Error fetching files:", error)
