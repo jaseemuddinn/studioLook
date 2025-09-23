@@ -27,14 +27,14 @@ export const ToastProvider = ({ children }) => {
             open: true
         }
         setToasts(prev => [...prev, newToast])
-        
+
         // Auto-dismiss after duration
         if (duration && duration > 0) {
             setTimeout(() => {
                 removeToast(id)
             }, duration)
         }
-        
+
         return id
     }
 
