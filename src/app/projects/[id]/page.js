@@ -965,6 +965,7 @@ export default function ProjectPage({ params }) {
                     }}
                     isClient={false}
                     shareToken={null}
+                    selectionStatus={getFileSelectionStatus(selectedFile.id)}
                 />
             )}
 
@@ -1432,7 +1433,8 @@ function ImageModal({
     onComment,
     permissions,
     isClient,
-    shareToken = null
+    shareToken = null,
+    selectionStatus = null
 }) {
     const [showCommentForm, setShowCommentForm] = useState(false)
     const [comment, setComment] = useState("")
@@ -1586,6 +1588,111 @@ function ImageModal({
                                         </svg>
                                         Download Original
                                     </a>
+                                </div>
+                            )}
+
+                            {/* Client Selections */}
+                            {!isClient && selectionStatus && selectionStatus.users && selectionStatus.users.length > 0 && (
+                                <div className="space-y-2 sm:space-y-3">
+                                    <h4 className="font-medium text-gray-900 text-sm sm:text-base">Client Selections</h4>
+
+                                    {/* Status Summary */}
+                                    <div className="bg-gray-50 p-2 sm:p-3 rounded-lg">
+                                        <div className="text-xs sm:text-sm text-gray-600 space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <span>Status:</span>
+                                                <span className={`font-medium ${selectionStatus.status === 'SELECTED' ? 'text-green-600' :
+                                                        selectionStatus.status === 'REJECTED' ? 'text-red-600' :
+                                                            selectionStatus.status === 'MIXED' ? 'text-yellow-600' :
+                                                                'text-gray-600'
+                                                    }`}>
+                                                    {selectionStatus.status === 'SELECTED' ? 'Selected' :
+                                                        selectionStatus.status === 'REJECTED' ? 'Rejected' :
+                                                            selectionStatus.status === 'MIXED' ? 'Mixed Response' :
+                                                                'Pending'}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span>Total Responses:</span>
+                                                <span className="font-medium">{selectionStatus.count}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Users who selected */}
+                                    {selectionStatus.selectedCount > 0 && (
+                                        <div className="space-y-2">
+                                            <div className="flex items-center space-x-2">
+                                                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                                <span className="text-sm font-medium text-gray-900">
+                                                    Selected by ({selectionStatus.selectedCount})
+                                                </span>
+                                            </div>
+                                            <div className="bg-green-50 p-2 sm:p-3 rounded-lg">
+                                                <div className="space-y-1">
+                                                    {selectionStatus.users
+                                                        .filter(user => user.status === 'SELECTED')
+                                                        .map((user, index) => (
+                                                            <div key={index} className="flex items-center justify-between text-xs sm:text-sm">
+                                                                <span className="text-gray-900">
+                                                                    {user.user.name || user.user.email}
+                                                                </span>
+                                                                <span className="text-gray-500">
+                                                                    {new Date(user.updatedAt).toLocaleDateString()}
+                                                                </span>
+                                                            </div>
+                                                        ))
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Users who rejected */}
+                                    {selectionStatus.rejectedCount > 0 && (
+                                        <div className="space-y-2">
+                                            <div className="flex items-center space-x-2">
+                                                <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                                                <span className="text-sm font-medium text-gray-900">
+                                                    Rejected by ({selectionStatus.rejectedCount})
+                                                </span>
+                                            </div>
+                                            <div className="bg-red-50 p-2 sm:p-3 rounded-lg">
+                                                <div className="space-y-1">
+                                                    {selectionStatus.users
+                                                        .filter(user => user.status === 'REJECTED')
+                                                        .map((user, index) => (
+                                                            <div key={index} className="flex items-center justify-between text-xs sm:text-sm">
+                                                                <span className="text-gray-900">
+                                                                    {user.user.name || user.user.email}
+                                                                </span>
+                                                                <span className="text-gray-500">
+                                                                    {new Date(user.updatedAt).toLocaleDateString()}
+                                                                </span>
+                                                            </div>
+                                                        ))
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Users who haven't responded */}
+                                    {selectionStatus.status === 'PENDING' && (
+                                        <div className="space-y-2">
+                                            <div className="flex items-center space-x-2">
+                                                <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                                                <span className="text-sm font-medium text-gray-900">
+                                                    No responses yet
+                                                </span>
+                                            </div>
+                                            <div className="bg-gray-50 p-2 sm:p-3 rounded-lg">
+                                                <p className="text-xs sm:text-sm text-gray-500 italic">
+                                                    Waiting for client feedback on this photo.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
