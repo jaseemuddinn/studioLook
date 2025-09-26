@@ -19,6 +19,7 @@ export default function GalleryView({
     const [filterStatus, setFilterStatus] = useState("all")
     const [sortBy, setSortBy] = useState("date")
     const [expandedFolders, setExpandedFolders] = useState({})
+    const [selectedFileFolder, setSelectedFileFolder] = useState(null) // Track which folder the selected file belongs to
 
     // Initialize expanded folders (all expanded by default)
     useEffect(() => {
@@ -71,9 +72,101 @@ export default function GalleryView({
         onSelectionChange?.(fileId, newStatus)
     }
 
-    const handleImageClick = (file) => {
+    const handleImageClick = (file, folderContext = null) => {
+        console.log('Image clicked:', file.originalName, 'Folder context:', folderContext?.name || 'none')
         setSelectedFile(file)
+        setSelectedFileFolder(folderContext)
         setShowImageModal(true)
+    }
+
+    const handleNavigateImage = (direction) => {
+        console.log('Navigating:', direction, 'Selected folder:', selectedFileFolder?.name || 'none')
+        // Determine which files to navigate within
+        let currentFiles
+        if (selectedFileFolder) {
+            // Navigate within the specific folder
+            currentFiles = selectedFileFolder.files.filter(file => {
+                const matchesSearch = file.originalName.toLowerCase().includes(searchTerm.toLowerCase())
+
+                if (filterStatus === "all") return matchesSearch
+
+                const selection = selections[file.id]
+                const status = selection?.status || "PENDING"
+
+                return matchesSearch && status.toLowerCase() === filterStatus.toLowerCase()
+            })
+
+            // Sort the folder files
+            currentFiles = [...currentFiles].sort((a, b) => {
+                switch (sortBy) {
+                    case "name":
+                        return a.originalName.localeCompare(b.originalName)
+                    case "size":
+                        return b.size - a.size
+                    case "date":
+                    default:
+                        return new Date(b.createdAt) - new Date(a.createdAt)
+                }
+            })
+            console.log('Navigating within folder files:', currentFiles.length)
+        } else {
+            // Fall back to all sorted files (for non-folder view)
+            currentFiles = sortedFiles
+            console.log('Navigating within all files:', currentFiles.length)
+        }
+
+        const currentIndex = currentFiles.findIndex(f => f.id === selectedFile?.id)
+
+        if (currentIndex === -1) return
+
+        let newIndex
+        if (direction === 'next') {
+            newIndex = currentIndex + 1 >= currentFiles.length ? 0 : currentIndex + 1
+        } else {
+            newIndex = currentIndex - 1 < 0 ? currentFiles.length - 1 : currentIndex - 1
+        }
+
+        setSelectedFile(currentFiles[newIndex])
+    }
+
+    const getCurrentFileIndex = () => {
+        // Determine which files to count within
+        let currentFiles
+        if (selectedFileFolder) {
+            // Count within the specific folder
+            currentFiles = selectedFileFolder.files.filter(file => {
+                const matchesSearch = file.originalName.toLowerCase().includes(searchTerm.toLowerCase())
+
+                if (filterStatus === "all") return matchesSearch
+
+                const selection = selections[file.id]
+                const status = selection?.status || "PENDING"
+
+                return matchesSearch && status.toLowerCase() === filterStatus.toLowerCase()
+            })
+
+            // Sort the folder files
+            currentFiles = [...currentFiles].sort((a, b) => {
+                switch (sortBy) {
+                    case "name":
+                        return a.originalName.localeCompare(b.originalName)
+                    case "size":
+                        return b.size - a.size
+                    case "date":
+                    default:
+                        return new Date(b.createdAt) - new Date(a.createdAt)
+                }
+            })
+        } else {
+            // Fall back to all sorted files (for non-folder view)
+            currentFiles = sortedFiles
+        }
+
+        const currentIndex = currentFiles.findIndex(f => f.id === selectedFile?.id)
+        return {
+            current: currentIndex + 1,
+            total: currentFiles.length
+        }
     }
 
     const getSelectionStatus = (fileId) => {
@@ -250,7 +343,7 @@ export default function GalleryView({
                                         ) : (
                                             <MasonryGallery
                                                 files={sortedFolderFiles}
-                                                onImageClick={handleImageClick}
+                                                onImageClick={(file) => handleImageClick(file, folder)}
                                                 onSelectionToggle={handleSelectionToggle}
                                                 getSelectionStatus={getSelectionStatus}
                                                 getStatusColor={getStatusColor}
@@ -280,7 +373,7 @@ export default function GalleryView({
                         ) : (
                             <MasonryGallery
                                 files={sortedFiles}
-                                onImageClick={handleImageClick}
+                                onImageClick={(file) => handleImageClick(file, null)}
                                 onSelectionToggle={handleSelectionToggle}
                                 getSelectionStatus={getSelectionStatus}
                                 getStatusColor={getStatusColor}
@@ -297,13 +390,31 @@ export default function GalleryView({
             {showImageModal && selectedFile && (
                 <ImageModal
                     file={selectedFile}
-                    onClose={() => setShowImageModal(false)}
+                    onClose={() => {
+                        setShowImageModal(false)
+                        setSelectedFileFolder(null)
+                    }}
                     onSelectionToggle={handleSelectionToggle}
                     onComment={onComment}
                     selectionStatus={getSelectionStatus(selectedFile.id)}
                     isClient={isClient}
                     permissions={permissions}
                     shareToken={shareToken}
+                    onNavigate={handleNavigateImage}
+                    fileIndex={getCurrentFileIndex()}
+                    hasMultipleFiles={(() => {
+                        if (selectedFileFolder) {
+                            const folderFiles = selectedFileFolder.files.filter(file => {
+                                const matchesSearch = file.originalName.toLowerCase().includes(searchTerm.toLowerCase())
+                                if (filterStatus === "all") return matchesSearch
+                                const selection = selections[file.id]
+                                const status = selection?.status || "PENDING"
+                                return matchesSearch && status.toLowerCase() === filterStatus.toLowerCase()
+                            })
+                            return folderFiles.length > 1
+                        }
+                        return sortedFiles.length > 1
+                    })()}
                 />
             )}
         </div>
@@ -475,7 +586,10 @@ function ImageModal({
     selectionStatus,
     isClient,
     permissions,
-    shareToken = null
+    shareToken = null,
+    onNavigate,
+    fileIndex,
+    hasMultipleFiles = false
 }) {
     const [showCommentForm, setShowCommentForm] = useState(false)
     const [comment, setComment] = useState("")
@@ -489,6 +603,26 @@ function ImageModal({
             fetchComments()
         }
     }, [file.id, permissions.canComment, shareToken])
+
+    // Keyboard navigation
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                onClose()
+            } else if (hasMultipleFiles && onNavigate) {
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault()
+                    onNavigate('prev')
+                } else if (e.key === 'ArrowRight') {
+                    e.preventDefault()
+                    onNavigate('next')
+                }
+            }
+        }
+
+        document.addEventListener('keydown', handleKeyDown)
+        return () => document.removeEventListener('keydown', handleKeyDown)
+    }, [onClose, onNavigate, hasMultipleFiles])
 
     const fetchComments = async () => {
         setIsLoadingComments(true)
@@ -577,6 +711,37 @@ function ImageModal({
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
+
+                    {/* Navigation buttons */}
+                    {hasMultipleFiles && onNavigate && (
+                        <>
+                            <button
+                                onClick={() => onNavigate('prev')}
+                                className="absolute left-2 top-1/2 -translate-y-1/2 text-white hover:text-gray-200 bg-black bg-opacity-50 hover:bg-opacity-70 rounded-full p-2 shadow-lg transition-all"
+                                title="Previous photo (←)"
+                            >
+                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={() => onNavigate('next')}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-white hover:text-gray-200 bg-black bg-opacity-50 hover:bg-opacity-70 rounded-full p-2 shadow-lg transition-all"
+                                title="Next photo (→)"
+                            >
+                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                        </>
+                    )}
+
+                    {/* Photo counter */}
+                    {hasMultipleFiles && fileIndex && (
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black bg-opacity-50 text-white px-3 py-1 rounded-full text-sm font-medium">
+                            {fileIndex.current} of {fileIndex.total}
+                        </div>
+                    )}
 
                     {/* Image/Video container */}
                     <div className="w-full h-full flex items-center justify-center p-4 sm:p-8">
