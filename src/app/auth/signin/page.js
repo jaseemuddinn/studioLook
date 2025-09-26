@@ -4,6 +4,7 @@ import { useState } from "react"
 import { signIn, getSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { useEffect } from "react"
 
 export default function SignIn() {
     const [email, setEmail] = useState("")
@@ -11,6 +12,7 @@ export default function SignIn() {
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState("")
     const router = useRouter()
+
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -40,6 +42,14 @@ export default function SignIn() {
             setIsLoading(false)
         }
     }
+
+    useEffect(() => {
+        getSession().then(session => {
+            if (session) {
+                router.push("/dashboard")
+            }
+        })
+    }, [router])
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">

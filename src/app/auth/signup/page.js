@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { signIn } from "next-auth/react"
+import { useEffect, useState } from "react"
+import { getSession, signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 
@@ -66,6 +66,14 @@ export default function SignUp() {
             setIsLoading(false)
         }
     }
+
+    useEffect(() => {
+            getSession().then(session => {
+                if (session) {
+                    router.push("/dashboard")
+                }
+            })
+        }, [router])
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
