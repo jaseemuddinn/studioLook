@@ -44,6 +44,31 @@ export default function ProjectPage({ params }) {
         setShowImageModal(true)
     }
 
+    const handleNavigateImage = (direction) => {
+        const currentFiles = getFilteredFiles()
+        const currentIndex = currentFiles.findIndex(f => f.id === selectedFile?.id)
+
+        if (currentIndex === -1) return
+
+        let newIndex
+        if (direction === 'next') {
+            newIndex = currentIndex + 1 >= currentFiles.length ? 0 : currentIndex + 1
+        } else {
+            newIndex = currentIndex - 1 < 0 ? currentFiles.length - 1 : currentIndex - 1
+        }
+
+        setSelectedFile(currentFiles[newIndex])
+    }
+
+    const getCurrentFileIndex = () => {
+        const currentFiles = getFilteredFiles()
+        const currentIndex = currentFiles.findIndex(f => f.id === selectedFile?.id)
+        return {
+            current: currentIndex + 1,
+            total: currentFiles.length
+        }
+    }
+
     const handleComment = async (fileId, content) => {
         try {
             const response = await fetch(`/api/files/${fileId}/comments`, {
@@ -966,6 +991,9 @@ export default function ProjectPage({ params }) {
                     isClient={false}
                     shareToken={null}
                     selectionStatus={getFileSelectionStatus(selectedFile.id)}
+                    onNavigate={handleNavigateImage}
+                    fileIndex={getCurrentFileIndex()}
+                    hasMultipleFiles={getFilteredFiles().length > 1}
                 />
             )}
 
@@ -1434,13 +1462,37 @@ function ImageModal({
     permissions,
     isClient,
     shareToken = null,
-    selectionStatus = null
+    selectionStatus = null,
+    onNavigate = null,
+    fileIndex = { current: 1, total: 1 },
+    hasMultipleFiles = false
 }) {
     const [showCommentForm, setShowCommentForm] = useState(false)
     const [comment, setComment] = useState("")
     const [isSubmittingComment, setIsSubmittingComment] = useState(false)
     const [comments, setComments] = useState([])
     const [isLoadingComments, setIsLoadingComments] = useState(false)
+
+    // Keyboard navigation
+    useEffect(() => {
+        const handleKeyPress = (e) => {
+            if (!hasMultipleFiles || !onNavigate) return
+
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault()
+                onNavigate('prev')
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault()
+                onNavigate('next')
+            } else if (e.key === 'Escape') {
+                e.preventDefault()
+                onClose()
+            }
+        }
+
+        document.addEventListener('keydown', handleKeyPress)
+        return () => document.removeEventListener('keydown', handleKeyPress)
+    }, [hasMultipleFiles, onNavigate, onClose])
 
     // Fetch comments when modal opens
     useEffect(() => {
@@ -1534,6 +1586,37 @@ function ImageModal({
                         </svg>
                     </button>
 
+                    {/* Navigation buttons */}
+                    {hasMultipleFiles && onNavigate && (
+                        <>
+                            <button
+                                onClick={() => onNavigate('prev')}
+                                className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10 text-gray-600 hover:text-gray-800 bg-white bg-opacity-90 rounded-full p-2 shadow-lg"
+                                title="Previous photo (←)"
+                            >
+                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={() => onNavigate('next')}
+                                className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10 text-gray-600 hover:text-gray-800 bg-white bg-opacity-90 rounded-full p-2 shadow-lg"
+                                title="Next photo (→)"
+                            >
+                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                        </>
+                    )}
+
+                    {/* Photo counter */}
+                    {hasMultipleFiles && (
+                        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10 bg-black bg-opacity-60 text-white px-3 py-1 rounded-full text-sm">
+                            {fileIndex.current} of {fileIndex.total}
+                        </div>
+                    )}
+
                     {/* Image/Video container */}
                     <div className="w-full h-full flex items-center justify-center p-4 sm:p-8">
                         {isVideo ? (
@@ -1602,9 +1685,9 @@ function ImageModal({
                                             <div className="flex items-center justify-between">
                                                 <span>Status:</span>
                                                 <span className={`font-medium ${selectionStatus.status === 'SELECTED' ? 'text-green-600' :
-                                                        selectionStatus.status === 'REJECTED' ? 'text-red-600' :
-                                                            selectionStatus.status === 'MIXED' ? 'text-yellow-600' :
-                                                                'text-gray-600'
+                                                    selectionStatus.status === 'REJECTED' ? 'text-red-600' :
+                                                        selectionStatus.status === 'MIXED' ? 'text-yellow-600' :
+                                                            'text-gray-600'
                                                     }`}>
                                                     {selectionStatus.status === 'SELECTED' ? 'Selected' :
                                                         selectionStatus.status === 'REJECTED' ? 'Rejected' :
