@@ -39,6 +39,16 @@ export default function ProjectPage({ params }) {
     const [selectionStats, setSelectionStats] = useState({ selected: 0, rejected: 0, pending: 0, total: 0 })
     const [selectionFilter, setSelectionFilter] = useState('all') // 'all', 'selected', 'rejected', 'pending'
 
+    // Folder upload states
+    const [showUploadSummary, setShowUploadSummary] = useState(false)
+    const [folderUploadData, setFolderUploadData] = useState({
+        validFiles: [],
+        invalidFiles: [],
+        oversizedFiles: [],
+        totalFiles: 0,
+        isProcessing: false
+    })
+
     const handleImageClick = (file) => {
         setSelectedFile(file)
         setShowImageModal(true)
@@ -323,6 +333,99 @@ export default function ProjectPage({ params }) {
         const sizes = ['Bytes', 'KB', 'MB', 'GB']
         const i = Math.floor(Math.log(bytes) / Math.log(k))
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+    }
+
+    // File validation utilities
+    const isValidFileType = (file) => {
+        const validTypes = [
+            'image/jpeg', 'image/jpg', 'image/png', 'image/gif',
+            'video/mp4', 'video/mov', 'video/avi'
+        ]
+        return validTypes.includes(file.type) ||
+            ['.jpeg', '.jpg', '.png', '.gif', '.mp4', '.mov', '.avi']
+                .some(ext => file.name.toLowerCase().endsWith(ext))
+    }
+
+    const isValidFileSize = (file) => {
+        return file.size <= 5 * 1024 * 1024 // 5MB
+    }
+
+    const categorizeFiles = (files) => {
+        const validFiles = []
+        const invalidFiles = []
+        const oversizedFiles = []
+
+        Array.from(files).forEach(file => {
+            if (!isValidFileType(file)) {
+                invalidFiles.push({
+                    file,
+                    reason: `Unsupported format (${file.type || 'unknown'})`,
+                    suggestion: 'Supported: JPG, PNG, GIF, MP4, MOV, AVI'
+                })
+            } else if (!isValidFileSize(file)) {
+                oversizedFiles.push({
+                    file,
+                    reason: `File too large (${formatFileSize(file.size)})`,
+                    suggestion: 'Maximum size: 5MB'
+                })
+            } else {
+                validFiles.push(file)
+            }
+        })
+
+        return { validFiles, invalidFiles, oversizedFiles }
+    }
+
+    // Folder upload processing
+    const handleFolderUpload = async (event) => {
+        const files = event.target.files
+        if (!files || files.length === 0) return
+
+        if (!selectedFolder) {
+            toast.warning("No Folder Selected", "Please select a folder first")
+            return
+        }
+
+        setFolderUploadData(prev => ({ ...prev, isProcessing: true }))
+
+        // Add a small delay to show processing state
+        await new Promise(resolve => setTimeout(resolve, 500))
+
+        const { validFiles, invalidFiles, oversizedFiles } = categorizeFiles(files)
+        const totalFiles = files.length
+
+        setFolderUploadData({
+            validFiles,
+            invalidFiles,
+            oversizedFiles,
+            totalFiles,
+            isProcessing: false
+        })
+
+        setShowUploadSummary(true)
+
+        // Reset the input
+        event.target.value = ''
+    }
+
+    // Proceed with uploading valid files
+    const proceedWithUpload = async () => {
+        setShowUploadSummary(false)
+
+        if (folderUploadData.validFiles.length === 0) {
+            toast.error("No Valid Files", "No files can be uploaded")
+            return
+        }
+
+        // Use existing onDrop logic with valid files
+        const acceptedFiles = folderUploadData.validFiles
+        const rejectedFiles = [...folderUploadData.invalidFiles, ...folderUploadData.oversizedFiles]
+            .map(item => ({
+                file: item.file,
+                errors: [{ code: 'custom', message: item.reason }]
+            }))
+
+        onDrop(acceptedFiles, rejectedFiles)
     }
 
     const onDrop = async (acceptedFiles, rejectedFiles) => {
@@ -836,9 +939,11 @@ export default function ProjectPage({ params }) {
                             <div className="space-y-6">
                                 {/* Upload Area */}
                                 <div className="bg-white rounded-lg shadow p-6">
-                                    <h3 className="text-lg font-medium text-gray-900 mb-4">
-                                        Upload to "{selectedFolder.name}"
-                                    </h3>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-lg font-medium text-gray-900">
+                                            Upload to "{selectedFolder.name}"
+                                        </h3>
+                                    </div>
 
                                     <div
                                         {...getRootProps()}
@@ -863,10 +968,13 @@ export default function ProjectPage({ params }) {
                                         </svg>
                                         <div className="mt-4">
                                             <p className="text-lg font-medium text-gray-900">
-                                                {isDragActive ? "Drop files here" : "Drag & drop files here"}
+                                                {isDragActive ? "Drop files here" : "Drag & drop files or folders here"}
                                             </p>
                                             <p className="text-sm text-gray-500 mt-1">
                                                 or click to browse • JPG, PNG, GIF, MP4, MOV up to 5MB each
+                                            </p>
+                                            <p className="text-xs text-gray-400 mt-1">
+                                                Upload of 300+ photos at once may cause browser to freeze briefly. 
                                             </p>
                                         </div>
                                         {uploading && (
@@ -2447,10 +2555,153 @@ function ShareProjectModal({ project, onClose, onDeleteShare, shares: parentShar
                             </div>
                         </div>
                     )}
+
+                    {/* Upload Summary Modal */}
+                    {showUploadSummary && (
+                        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                            <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+                                <div className="mt-3">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-lg font-medium text-gray-900">
+                                            Folder Upload Summary
+                                        </h3>
+                                        <button
+                                            onClick={() => setShowUploadSummary(false)}
+                                            className="text-gray-400 hover:text-gray-600"
+                                        >
+                                            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+
+                                    <div className="mb-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                                <div className="flex items-center">
+                                                    <svg className="h-8 w-8 text-green-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    <div>
+                                                        <p className="text-lg font-semibold text-green-900">{folderUploadData.validFiles.length}</p>
+                                                        <p className="text-sm text-green-700">Ready to upload</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                                                <div className="flex items-center">
+                                                    <svg className="h-8 w-8 text-red-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    <div>
+                                                        <p className="text-lg font-semibold text-red-900">{folderUploadData.invalidFiles.length}</p>
+                                                        <p className="text-sm text-red-700">Invalid format</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                                                <div className="flex items-center">
+                                                    <svg className="h-8 w-8 text-orange-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                    </svg>
+                                                    <div>
+                                                        <p className="text-lg font-semibold text-orange-900">{folderUploadData.oversizedFiles.length}</p>
+                                                        <p className="text-sm text-orange-700">Too large</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                                            <h4 className="font-medium text-blue-900 mb-2">Summary</h4>
+                                            <p className="text-sm text-blue-800">
+                                                Found {folderUploadData.totalFiles} files total.
+                                                {folderUploadData.validFiles.length > 0 && (
+                                                    <span className="font-medium"> {folderUploadData.validFiles.length} files will be uploaded.</span>
+                                                )}
+                                                {(folderUploadData.invalidFiles.length > 0 || folderUploadData.oversizedFiles.length > 0) && (
+                                                    <span> {folderUploadData.invalidFiles.length + folderUploadData.oversizedFiles.length} files will be skipped.</span>
+                                                )}
+                                            </p>
+                                        </div>
+
+                                        {/* Error details */}
+                                        {(folderUploadData.invalidFiles.length > 0 || folderUploadData.oversizedFiles.length > 0) && (
+                                            <div className="space-y-3">
+                                                {folderUploadData.invalidFiles.length > 0 && (
+                                                    <div>
+                                                        <h4 className="font-medium text-red-900 mb-2">Unsupported Files ({folderUploadData.invalidFiles.length})</h4>
+                                                        <div className="max-h-32 overflow-y-auto bg-red-50 border border-red-200 rounded-md p-3">
+                                                            {folderUploadData.invalidFiles.slice(0, 5).map((item, index) => (
+                                                                <div key={index} className="text-sm text-red-800 mb-1">
+                                                                    <span className="font-medium">{item.file.name}</span> - {item.reason}
+                                                                </div>
+                                                            ))}
+                                                            {folderUploadData.invalidFiles.length > 5 && (
+                                                                <div className="text-sm text-red-600 font-medium">
+                                                                    ... and {folderUploadData.invalidFiles.length - 5} more
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {folderUploadData.oversizedFiles.length > 0 && (
+                                                    <div>
+                                                        <h4 className="font-medium text-orange-900 mb-2">Oversized Files ({folderUploadData.oversizedFiles.length})</h4>
+                                                        <div className="max-h-32 overflow-y-auto bg-orange-50 border border-orange-200 rounded-md p-3">
+                                                            {folderUploadData.oversizedFiles.slice(0, 5).map((item, index) => (
+                                                                <div key={index} className="text-sm text-orange-800 mb-1">
+                                                                    <span className="font-medium">{item.file.name}</span> - {item.reason}
+                                                                </div>
+                                                            ))}
+                                                            {folderUploadData.oversizedFiles.length > 5 && (
+                                                                <div className="text-sm text-orange-600 font-medium">
+                                                                    ... and {folderUploadData.oversizedFiles.length - 5} more
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="flex justify-end space-x-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowUploadSummary(false)}
+                                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                                        >
+                                            Cancel
+                                        </button>
+                                        {folderUploadData.validFiles.length > 0 ? (
+                                            <button
+                                                type="button"
+                                                onClick={proceedWithUpload}
+                                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
+                                            >
+                                                Upload {folderUploadData.validFiles.length} Files
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowUploadSummary(false)}
+                                                className="px-4 py-2 text-sm font-medium text-white bg-gray-400 rounded-md cursor-not-allowed"
+                                                disabled
+                                            >
+                                                No Files to Upload
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
     )
 }
-
-
