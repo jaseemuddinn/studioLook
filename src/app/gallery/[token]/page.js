@@ -32,8 +32,12 @@ export default function SharedGallery({ params }) {
     useEffect(() => {
         if (session?.user && project) {
             fetchUserSelections()
-            if (session.user.role === "CLIENT") {
+            // Only fetch join status if user is not the project owner
+            if (project.ownerId !== session.user.id) {
                 fetchJoinStatus()
+            } else {
+                // Owner doesn't need to join their own gallery
+                setJoinStatus({ hasJoined: true, canJoin: false })
             }
         }
     }, [session, project])
@@ -235,48 +239,44 @@ export default function SharedGallery({ params }) {
                                     <span className="text-sm text-gray-700">
                                         {session.user.name || session.user.email}
                                     </span>
-                                    {session.user.role === "CLIENT" && (
-                                        <>
-                                            {!joinStatus.hasJoined && joinStatus.canJoin && (
-                                                <button
-                                                    onClick={handleJoinGallery}
-                                                    disabled={isJoining}
-                                                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center space-x-2"
-                                                >
-                                                    {isJoining ? (
-                                                        <>
-                                                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                            </svg>
-                                                            <span>Joining...</span>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                                            </svg>
-                                                            <span>Join Gallery</span>
-                                                        </>
-                                                    )}
-                                                </button>
-                                            )}
-                                            {joinStatus.hasJoined && (
-                                                <div className="flex items-center space-x-2 text-green-600 bg-green-50 px-3 py-1 rounded-full">
-                                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    {project.ownerId !== session.user.id && !joinStatus.hasJoined && joinStatus.canJoin && (
+                                        <button
+                                            onClick={handleJoinGallery}
+                                            disabled={isJoining}
+                                            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center space-x-2"
+                                        >
+                                            {isJoining ? (
+                                                <>
+                                                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                                     </svg>
-                                                    <span className="text-sm font-medium">Joined</span>
-                                                </div>
+                                                    <span>Joining...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                                    </svg>
+                                                    <span>Join Gallery</span>
+                                                </>
                                             )}
-                                            <Link
-                                                href="/client"
-                                                className="text-blue-600 hover:text-blue-500 text-sm font-medium"
-                                            >
-                                                My Galleries
-                                            </Link>
-                                        </>
+                                        </button>
                                     )}
+                                    {project.ownerId !== session.user.id && joinStatus.hasJoined && (
+                                        <div className="flex items-center space-x-2 text-green-600 bg-green-50 px-3 py-1 rounded-full">
+                                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            <span className="text-sm font-medium">Joined</span>
+                                        </div>
+                                    )}
+                                    <Link
+                                        href="/dashboard"
+                                        className="text-blue-600 hover:text-blue-500 text-sm font-medium"
+                                    >
+                                        Dashboard
+                                    </Link>
                                 </div>
                             ) : (
                                 <div className="flex space-x-4">
@@ -303,7 +303,7 @@ export default function SharedGallery({ params }) {
 
             {/* Gallery */}
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {session?.user?.role === "CLIENT" && !joinStatus.hasJoined && joinStatus.canJoin && (
+                {session?.user && project.ownerId !== session.user.id && !joinStatus.hasJoined && joinStatus.canJoin && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
                         <div className="flex items-start">
                             <svg className="h-6 w-6 text-blue-400 mt-0.5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -312,7 +312,7 @@ export default function SharedGallery({ params }) {
                             <div className="flex-1">
                                 <h3 className="text-lg font-medium text-blue-900 mb-2">Join this Gallery</h3>
                                 <p className="text-blue-800 text-sm mb-4">
-                                    This gallery has been shared with you! Click "Join Gallery" above to add it to your client dashboard and start selecting photos.
+                                    This gallery has been shared with you! Click "Join Gallery" above to add it to your dashboard and start selecting photos.
                                 </p>
                                 <button
                                     onClick={handleJoinGallery}

@@ -12,11 +12,8 @@ export default function Home() {
 
   useEffect(() => {
     if (status === "authenticated" && session?.user) {
-      if (session.user.role === "PHOTOGRAPHER") {
-        router.push("/dashboard")
-      } else {
-        router.push("/client")
-      }
+      // Direct everyone to the unified dashboard
+      router.push("/dashboard")
     }
   }, [status, session, router])
 

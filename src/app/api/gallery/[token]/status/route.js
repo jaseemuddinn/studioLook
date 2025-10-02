@@ -6,7 +6,7 @@ export async function GET(request, { params }) {
     try {
         const session = await auth()
 
-        if (!session?.user || session.user.role !== "CLIENT") {
+        if (!session?.user) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
@@ -26,26 +26,44 @@ export async function GET(request, { params }) {
             return NextResponse.json({ message: "Gallery access has expired" }, { status: 403 })
         }
 
+        // Debug: Show all shares for this token
+        const allShares = await ProjectShare.find({ token })
+        console.log(`All shares for token ${token}:`, allShares.map(s => ({
+            _id: s._id,
+            userId: s.userId,
+            email: s.email,
+            joinedAt: s.joinedAt
+        })))
+
         // Check if user has access to this gallery (either by email or userId)
+        // Also check for user-specific access tokens
         const userShare = await ProjectShare.findOne({
-            token,
             $or: [
-                { userId: session.user.id },
-                { email: session.user.email }
+                // Original token with user match
+                {
+                    token,
+                    $or: [
+                        { userId: session.user.id },
+                        { email: session.user.email }
+                    ]
+                },
+                // User-specific access token
+                { token: `${token}_${session.user.id}` },
+                // Timestamped user tokens (pattern: originalToken_userId_timestamp)
+                {
+                    token: { $regex: `^${token}_${session.user.id}_\\d+$` }
+                }
             ]
         })
 
-        const hasJoined = !!userShare
+        // User has joined if they have a share record AND it has a joinedAt timestamp
+        const hasJoined = !!(userShare && userShare.joinedAt)
 
-        // console.log(`Status check for user ${session.user.id} on token ${token}:`, {
-        //     userShareFound: !!userShare,
-        //     userShareId: userShare?._id,
-        //     hasJoined
-        // })
-
-        return NextResponse.json({
-            hasJoined,
-            canJoin: !hasJoined
+        console.log(`Status check for user ${session.user.id} on token ${token}:`, {
+            userShareFound: !!userShare,
+            userShareId: userShare?._id,
+            joinedAt: userShare?.joinedAt,
+            hasJoined
         })
 
         return NextResponse.json({

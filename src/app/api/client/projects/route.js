@@ -6,7 +6,7 @@ export async function GET() {
     try {
         const session = await auth()
 
-        if (!session?.user || session.user.role !== "CLIENT") {
+        if (!session?.user) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
@@ -20,33 +20,60 @@ export async function GET() {
             ]
         }).sort({ createdAt: -1 }).lean()
 
-        // console.log(`Client dashboard for user ${session.user.id} (${session.user.email}):`, {
-        //     foundShares: sharedProjects.length,
-        //     shares: sharedProjects.map(s => ({ id: s._id, email: s.email, userId: s.userId }))
-        // })
+        console.log(`Found ${sharedProjects.length} shares for user ${session.user.email}:`,
+            sharedProjects.map(s => ({
+                _id: s._id,
+                projectId: s.projectId,
+                token: s.token,
+                joinedAt: s.joinedAt
+            }))
+        )
 
         // Get project details with owners
         const projectsWithDetails = await Promise.all(
             sharedProjects.map(async (share) => {
-                const project = await Project.findById(share.projectId).lean()
-                const owner = await User.findById(project.ownerId).select('_id name email').lean()
+                try {
+                    const project = await Project.findById(share.projectId).lean()
 
-                return {
-                    ...project,
-                    id: project._id.toString(), // Add id field for frontend compatibility
-                    owner,
-                    token: share.token,
-                    joinedAt: share.joinedAt,
-                    permissions: {
-                        canSelect: share.canSelect,
-                        canComment: share.canComment,
-                        canDownload: share.canDownload
+                    // Skip if project doesn't exist (may have been deleted)
+                    if (!project) {
+                        console.warn(`Project ${share.projectId} referenced in share ${share._id} not found`)
+                        return null
                     }
+
+                    const owner = await User.findById(project.ownerId).select('_id name email').lean()
+
+                    // Skip if owner doesn't exist
+                    if (!owner) {
+                        console.warn(`Owner ${project.ownerId} for project ${project._id} not found`)
+                        return null
+                    }
+
+                    return {
+                        ...project,
+                        id: project._id.toString(), // Add id field for frontend compatibility
+                        owner,
+                        token: share.token,
+                        joinedAt: share.joinedAt,
+                        permissions: {
+                            canSelect: share.canSelect,
+                            canComment: share.canComment,
+                            canDownload: share.canDownload
+                        }
+                    }
+                } catch (error) {
+                    console.error(`Error processing share ${share._id}:`, error)
+                    return null
                 }
             })
         )
 
-        return NextResponse.json(projectsWithDetails)
+        // Filter out null entries (deleted projects/owners)
+        const validProjects = projectsWithDetails.filter(project => project !== null)
+
+        console.log(`Fetched ${validProjects.length} valid shared projects for user ${session.user.email}`)
+
+        return NextResponse.json(validProjects)
     } catch (error) {
         console.error("Error fetching shared projects:", error)
         return NextResponse.json(

@@ -29,12 +29,8 @@ export default function SignIn() {
             if (result?.error) {
                 setError("Invalid credentials")
             } else {
-                const session = await getSession()
-                if (session?.user?.role === "PHOTOGRAPHER") {
-                    router.push("/dashboard")
-                } else {
-                    router.push("/client")
-                }
+                // Direct everyone to unified dashboard
+                router.push("/dashboard")
             }
         } catch (error) {
             setError("An error occurred. Please try again.")

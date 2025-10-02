@@ -11,7 +11,7 @@ export default function SignUp() {
         email: "",
         password: "",
         confirmPassword: "",
-        role: "CLIENT"
+        role: "ALL_FEATURES"
     })
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState("")
@@ -54,11 +54,8 @@ export default function SignUp() {
             if (result?.error) {
                 setError(result.error)
             } else {
-                if (formData.role === "PHOTOGRAPHER") {
-                    router.push("/dashboard")
-                } else {
-                    router.push("/client")
-                }
+                // Everyone goes to the unified dashboard now
+                router.push("/dashboard")
             }
         } catch (error) {
             setError("An error occurred. Please try again.")
@@ -68,12 +65,12 @@ export default function SignUp() {
     }
 
     useEffect(() => {
-            getSession().then(session => {
-                if (session) {
-                    router.push("/dashboard")
-                }
-            })
-        }, [router])
+        getSession().then(session => {
+            if (session) {
+                router.push("/dashboard")
+            }
+        })
+    }, [router])
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -134,9 +131,12 @@ export default function SignUp() {
                                 onChange={handleChange}
                                 className="mt-1 block w-full px-3 py-2 border text-gray-900 border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                             >
-                                <option value="CLIENT">Client</option>
-                                <option value="PHOTOGRAPHER">Photographer</option>
+                                <option value="ALL_FEATURES">All Features (Create & View Projects)</option>
+                                <option value="CLIENT">Client Only (View Shared Projects)</option>
                             </select>
+                            <p className="mt-1 text-xs text-gray-500">
+                                All Features: Create your own projects and view shared ones • Client Only: View and interact with shared projects
+                            </p>
                         </div>
                         <div>
                             <label htmlFor="password" className="block text-sm font-medium text-gray-700">

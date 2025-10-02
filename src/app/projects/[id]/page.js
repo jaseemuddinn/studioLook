@@ -6,6 +6,7 @@ import { useEffect, useState, use } from "react"
 import { useDropzone } from "react-dropzone"
 import Link from "next/link"
 import { useToast } from "@/components/Toast"
+import FolderDropZone from "@/components/FolderDropZone"
 
 export default function ProjectPage({ params }) {
     const resolvedParams = use(params)
@@ -324,6 +325,18 @@ export default function ProjectPage({ params }) {
             }
         } catch (error) {
             console.error("Error fetching files:", error)
+        }
+    }
+
+    // Handler for when folders are created via drag & drop
+    const handleFoldersCreated = async (newFolders) => {
+        // Refresh the project to get all folders including the new ones
+        await fetchProject()
+
+        // If no folder was selected and we have new folders, select the first one
+        if (!selectedFolder && newFolders.length > 0) {
+            setSelectedFolder(newFolders[0])
+            fetchFiles(newFolders[0].id)
         }
     }
 
@@ -872,65 +885,76 @@ export default function ProjectPage({ params }) {
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                     {/* Folders Sidebar */}
                     <div className="lg:col-span-1">
-                        <div className="bg-white rounded-lg shadow p-6">
-                            <h3 className="text-lg font-medium text-gray-900 mb-4">Folders</h3>
+                        <FolderDropZone
+                            projectId={project.id}
+                            onFoldersCreated={handleFoldersCreated}
+                            isEnabled={true}
+                        >
+                            <div className="bg-white rounded-lg shadow p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-lg font-medium text-gray-900">Folders</h3>
+                                    <div className="text-xs text-gray-500 bg-blue-50 px-2 py-1 rounded">
+                                        Drop folders here
+                                    </div>
+                                </div>
 
-                            {folders.length === 0 ? (
-                                <div className="text-center py-8">
-                                    <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                                    </svg>
-                                    <p className="mt-2 text-sm text-gray-500">No folders yet</p>
-                                    <button
-                                        onClick={() => setShowNewFolderModal(true)}
-                                        className="mt-2 text-blue-600 hover:text-blue-500 text-sm font-medium"
-                                    >
-                                        Create first folder
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    {folders.map((folder) => (
-                                        <div key={folder.id} className={`relative group rounded-md transition-colors ${selectedFolder?.id === folder.id
-                                            ? "bg-blue-100 text-blue-700"
-                                            : "text-gray-700 hover:bg-gray-100"
-                                            }`}>
-                                            <button
-                                                onClick={() => {
-                                                    setSelectedFolder(folder)
-                                                    fetchFiles(folder.id)
-                                                }}
-                                                className="w-full text-left px-3 py-2"
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center">
-                                                        <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                                                        </svg>
-                                                        <span className="text-sm font-medium truncate">{folder.name}</span>
+                                {folders.length === 0 ? (
+                                    <div className="text-center py-8">
+                                        <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                                        </svg>
+                                        <p className="mt-2 text-sm text-gray-500">No folders yet</p>
+                                        <button
+                                            onClick={() => setShowNewFolderModal(true)}
+                                            className="mt-2 text-blue-600 hover:text-blue-500 text-sm font-medium"
+                                        >
+                                            Create first folder
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {folders.map((folder) => (
+                                            <div key={folder.id} className={`relative group rounded-md transition-colors ${selectedFolder?.id === folder.id
+                                                ? "bg-blue-100 text-blue-700"
+                                                : "text-gray-700 hover:bg-gray-100"
+                                                }`}>
+                                                <button
+                                                    onClick={() => {
+                                                        setSelectedFolder(folder)
+                                                        fetchFiles(folder.id)
+                                                    }}
+                                                    className="w-full text-left px-3 py-2"
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center">
+                                                            <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                                                            </svg>
+                                                            <span className="text-sm font-medium truncate">{folder.name}</span>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                                <p className="text-xs text-gray-500 ml-7 mt-1">
-                                                    {folder._count?.files || 0} files
-                                                </p>
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    setDeleteConfirm({ type: 'folder', item: folder, isDeleting: false })
-                                                }}
-                                                className="absolute right-2 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700"
-                                                title="Delete folder and all its contents"
-                                            >
-                                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                                                    <p className="text-xs text-gray-500 ml-7 mt-1">
+                                                        {folder._count?.files || 0} files
+                                                    </p>
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setDeleteConfirm({ type: 'folder', item: folder, isDeleting: false })
+                                                    }}
+                                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700"
+                                                    title="Delete folder and all its contents"
+                                                >
+                                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </FolderDropZone>
                     </div>
 
                     {/* Main Content */}
@@ -974,7 +998,7 @@ export default function ProjectPage({ params }) {
                                                 or click to browse • JPG, PNG, GIF, MP4, MOV up to 5MB each
                                             </p>
                                             <p className="text-xs text-gray-400 mt-1">
-                                                Upload of 300+ photos at once may cause browser to freeze briefly. 
+                                                Upload of 300+ photos at once may cause browser to freeze briefly.
                                             </p>
                                         </div>
                                         {uploading && (
@@ -983,6 +1007,28 @@ export default function ProjectPage({ params }) {
                                                 <p className="text-sm text-gray-500 mt-2">Uploading...</p>
                                             </div>
                                         )}
+                                    </div>
+
+                                    {/* Folder upload option */}
+                                    <div className="mt-4 pt-4 border-t border-gray-200">
+                                        <div className="flex items-center justify-center">
+                                            <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg inline-flex items-center transition-colors">
+                                                <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                                                </svg>
+                                                Upload Folder
+                                                <input
+                                                    type="file"
+                                                    webkitdirectory=""
+                                                    multiple
+                                                    onChange={handleFolderUpload}
+                                                    className="hidden"
+                                                />
+                                            </label>
+                                        </div>
+                                        <p className="text-xs text-gray-500 text-center mt-2">
+                                            Select a folder to upload all its contents
+                                        </p>
                                     </div>
                                 </div>
 
@@ -1328,6 +1374,151 @@ export default function ProjectPage({ params }) {
                                 >
                                     {deleteShareConfirm.isDeleting ? "Deleting..." : "Delete Share"}
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Upload Summary Modal */}
+            {showUploadSummary && (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                    <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+                        <div className="mt-3">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-medium text-gray-900">
+                                    Folder Upload Summary
+                                </h3>
+                                <button
+                                    onClick={() => setShowUploadSummary(false)}
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
+                                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="mb-6">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                        <div className="flex items-center">
+                                            <svg className="h-8 w-8 text-green-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <div>
+                                                <p className="text-lg font-semibold text-green-900">{folderUploadData.validFiles.length}</p>
+                                                <p className="text-sm text-green-700">Ready to upload</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                                        <div className="flex items-center">
+                                            <svg className="h-8 w-8 text-red-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <div>
+                                                <p className="text-lg font-semibold text-red-900">{folderUploadData.invalidFiles.length}</p>
+                                                <p className="text-sm text-red-700">Invalid format</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                                        <div className="flex items-center">
+                                            <svg className="h-8 w-8 text-orange-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                            </svg>
+                                            <div>
+                                                <p className="text-lg font-semibold text-orange-900">{folderUploadData.oversizedFiles.length}</p>
+                                                <p className="text-sm text-orange-700">Too large</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                                    <h4 className="font-medium text-blue-900 mb-2">Summary</h4>
+                                    <p className="text-sm text-blue-800">
+                                        Found {folderUploadData.totalFiles} files total.
+                                        {folderUploadData.validFiles.length > 0 && (
+                                            <span className="font-medium"> {folderUploadData.validFiles.length} files will be uploaded.</span>
+                                        )}
+                                        {(folderUploadData.invalidFiles.length > 0 || folderUploadData.oversizedFiles.length > 0) && (
+                                            <span> {folderUploadData.invalidFiles.length + folderUploadData.oversizedFiles.length} files will be skipped.</span>
+                                        )}
+                                    </p>
+                                </div>
+
+                                {/* Error details */}
+                                {(folderUploadData.invalidFiles.length > 0 || folderUploadData.oversizedFiles.length > 0) && (
+                                    <div className="space-y-3">
+                                        {folderUploadData.invalidFiles.length > 0 && (
+                                            <div>
+                                                <h4 className="font-medium text-red-900 mb-2">Unsupported Files ({folderUploadData.invalidFiles.length})</h4>
+                                                <div className="max-h-32 overflow-y-auto bg-red-50 border border-red-200 rounded-md p-3">
+                                                    {folderUploadData.invalidFiles.slice(0, 5).map((item, index) => (
+                                                        <div key={index} className="text-sm text-red-800 mb-1">
+                                                            <span className="font-medium">{item.file.name}</span> - {item.reason}
+                                                        </div>
+                                                    ))}
+                                                    {folderUploadData.invalidFiles.length > 5 && (
+                                                        <div className="text-sm text-red-600 font-medium">
+                                                            ... and {folderUploadData.invalidFiles.length - 5} more
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {folderUploadData.oversizedFiles.length > 0 && (
+                                            <div>
+                                                <h4 className="font-medium text-orange-900 mb-2">Oversized Files ({folderUploadData.oversizedFiles.length})</h4>
+                                                <div className="max-h-32 overflow-y-auto bg-orange-50 border border-orange-200 rounded-md p-3">
+                                                    {folderUploadData.oversizedFiles.slice(0, 5).map((item, index) => (
+                                                        <div key={index} className="text-sm text-orange-800 mb-1">
+                                                            <span className="font-medium">{item.file.name}</span> - {item.reason}
+                                                        </div>
+                                                    ))}
+                                                    {folderUploadData.oversizedFiles.length > 5 && (
+                                                        <div className="text-sm text-orange-600 font-medium">
+                                                            ... and {folderUploadData.oversizedFiles.length - 5} more
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex justify-end space-x-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowUploadSummary(false)}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                                >
+                                    Cancel
+                                </button>
+                                {folderUploadData.validFiles.length > 0 ? (
+                                    <button
+                                        type="button"
+                                        onClick={proceedWithUpload}
+                                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
+                                    >
+                                        Upload {folderUploadData.validFiles.length} Files
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowUploadSummary(false)}
+                                        className="px-4 py-2 text-sm font-medium text-white bg-gray-400 rounded-md cursor-not-allowed"
+                                        disabled
+                                    >
+                                        No Files to Upload
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -2556,150 +2747,7 @@ function ShareProjectModal({ project, onClose, onDeleteShare, shares: parentShar
                         </div>
                     )}
 
-                    {/* Upload Summary Modal */}
-                    {showUploadSummary && (
-                        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-                            <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
-                                <div className="mt-3">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-lg font-medium text-gray-900">
-                                            Folder Upload Summary
-                                        </h3>
-                                        <button
-                                            onClick={() => setShowUploadSummary(false)}
-                                            className="text-gray-400 hover:text-gray-600"
-                                        >
-                                            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    </div>
 
-                                    <div className="mb-6">
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                                            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                                                <div className="flex items-center">
-                                                    <svg className="h-8 w-8 text-green-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                    </svg>
-                                                    <div>
-                                                        <p className="text-lg font-semibold text-green-900">{folderUploadData.validFiles.length}</p>
-                                                        <p className="text-sm text-green-700">Ready to upload</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                                                <div className="flex items-center">
-                                                    <svg className="h-8 w-8 text-red-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                    </svg>
-                                                    <div>
-                                                        <p className="text-lg font-semibold text-red-900">{folderUploadData.invalidFiles.length}</p>
-                                                        <p className="text-sm text-red-700">Invalid format</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                                                <div className="flex items-center">
-                                                    <svg className="h-8 w-8 text-orange-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                                                    </svg>
-                                                    <div>
-                                                        <p className="text-lg font-semibold text-orange-900">{folderUploadData.oversizedFiles.length}</p>
-                                                        <p className="text-sm text-orange-700">Too large</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                                            <h4 className="font-medium text-blue-900 mb-2">Summary</h4>
-                                            <p className="text-sm text-blue-800">
-                                                Found {folderUploadData.totalFiles} files total.
-                                                {folderUploadData.validFiles.length > 0 && (
-                                                    <span className="font-medium"> {folderUploadData.validFiles.length} files will be uploaded.</span>
-                                                )}
-                                                {(folderUploadData.invalidFiles.length > 0 || folderUploadData.oversizedFiles.length > 0) && (
-                                                    <span> {folderUploadData.invalidFiles.length + folderUploadData.oversizedFiles.length} files will be skipped.</span>
-                                                )}
-                                            </p>
-                                        </div>
-
-                                        {/* Error details */}
-                                        {(folderUploadData.invalidFiles.length > 0 || folderUploadData.oversizedFiles.length > 0) && (
-                                            <div className="space-y-3">
-                                                {folderUploadData.invalidFiles.length > 0 && (
-                                                    <div>
-                                                        <h4 className="font-medium text-red-900 mb-2">Unsupported Files ({folderUploadData.invalidFiles.length})</h4>
-                                                        <div className="max-h-32 overflow-y-auto bg-red-50 border border-red-200 rounded-md p-3">
-                                                            {folderUploadData.invalidFiles.slice(0, 5).map((item, index) => (
-                                                                <div key={index} className="text-sm text-red-800 mb-1">
-                                                                    <span className="font-medium">{item.file.name}</span> - {item.reason}
-                                                                </div>
-                                                            ))}
-                                                            {folderUploadData.invalidFiles.length > 5 && (
-                                                                <div className="text-sm text-red-600 font-medium">
-                                                                    ... and {folderUploadData.invalidFiles.length - 5} more
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {folderUploadData.oversizedFiles.length > 0 && (
-                                                    <div>
-                                                        <h4 className="font-medium text-orange-900 mb-2">Oversized Files ({folderUploadData.oversizedFiles.length})</h4>
-                                                        <div className="max-h-32 overflow-y-auto bg-orange-50 border border-orange-200 rounded-md p-3">
-                                                            {folderUploadData.oversizedFiles.slice(0, 5).map((item, index) => (
-                                                                <div key={index} className="text-sm text-orange-800 mb-1">
-                                                                    <span className="font-medium">{item.file.name}</span> - {item.reason}
-                                                                </div>
-                                                            ))}
-                                                            {folderUploadData.oversizedFiles.length > 5 && (
-                                                                <div className="text-sm text-orange-600 font-medium">
-                                                                    ... and {folderUploadData.oversizedFiles.length - 5} more
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="flex justify-end space-x-3">
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowUploadSummary(false)}
-                                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
-                                        >
-                                            Cancel
-                                        </button>
-                                        {folderUploadData.validFiles.length > 0 ? (
-                                            <button
-                                                type="button"
-                                                onClick={proceedWithUpload}
-                                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
-                                            >
-                                                Upload {folderUploadData.validFiles.length} Files
-                                            </button>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowUploadSummary(false)}
-                                                className="px-4 py-2 text-sm font-medium text-white bg-gray-400 rounded-md cursor-not-allowed"
-                                                disabled
-                                            >
-                                                No Files to Upload
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
         </div>
