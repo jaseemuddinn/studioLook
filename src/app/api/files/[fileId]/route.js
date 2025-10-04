@@ -2,12 +2,13 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { connectToDatabase, File, Folder, Project } from "@/lib/db"
 import { deleteFromS3, getS3KeyFromUrl } from "@/lib/s3"
+import { removeFromStorageUsage } from "@/lib/storage"
 
 export async function DELETE(request, { params }) {
     try {
         const session = await auth()
 
-        if (!session?.user || session.user.role !== "PHOTOGRAPHER") {
+        if (!session?.user || (session.user.role !== "PHOTOGRAPHER" && session.user.role !== "ALL_FEATURES")) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
@@ -62,6 +63,9 @@ export async function DELETE(request, { params }) {
 
         // Delete the file from database
         await File.findByIdAndDelete(resolvedParams.fileId)
+
+        // Update user storage usage
+        await removeFromStorageUsage(session.user.id, file.size)
 
         return NextResponse.json({
             message: "File deleted successfully",

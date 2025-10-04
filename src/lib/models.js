@@ -14,11 +14,20 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['PHOTOGRAPHER', 'CLIENT'],
+        enum: ['PHOTOGRAPHER', 'CLIENT', 'ALL_FEATURES'],
         default: 'CLIENT'
     },
     emailVerified: Date,
-    image: String
+    image: String,
+    // Storage tracking
+    storageUsed: {
+        type: Number,
+        default: 0
+    },
+    storageLimit: {
+        type: Number,
+        default: 2 * 1024 * 1024 * 1024 // 2GB in bytes
+    }
 }, {
     timestamps: true
 })
@@ -108,6 +117,11 @@ const fileSchema = new mongoose.Schema({
     folderId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Folder'
+    },
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
     },
     position: {
         type: Number,

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import NotificationDropdown from "@/components/NotificationDropdown"
+import StorageIndicator, { TopBarStorage } from "@/components/StorageIndicator"
 
 export default function Dashboard() {
     const { data: session, status } = useSession()
@@ -84,6 +85,7 @@ export default function Dashboard() {
                             </span>
                         </div>
                         <div className="flex items-center space-x-4">
+                            <TopBarStorage />
                             <NotificationDropdown />
                             <span className="text-sm text-gray-700">
                                 Welcome, {session.user.name || session.user.email}
@@ -133,8 +135,8 @@ export default function Dashboard() {
                         <button
                             onClick={() => setActiveTab('my-projects')}
                             className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'my-projects'
-                                    ? 'border-blue-500 text-blue-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                ? 'border-blue-500 text-blue-600'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                 }`}
                         >
                             My Projects ({projects.length})
@@ -142,14 +144,17 @@ export default function Dashboard() {
                         <button
                             onClick={() => setActiveTab('shared-with-me')}
                             className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'shared-with-me'
-                                    ? 'border-blue-500 text-blue-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                ? 'border-blue-500 text-blue-600'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                 }`}
                         >
                             Shared with Me ({sharedProjects.length})
                         </button>
                     </nav>
                 </div>
+
+                {/* Storage Indicator - Only shows when needed (50%+ usage) */}
+                <StorageIndicator />
 
                 {/* Content Area */}
                 {activeTab === 'my-projects' ? (

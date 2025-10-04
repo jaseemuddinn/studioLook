@@ -7,6 +7,7 @@ import { useDropzone } from "react-dropzone"
 import Link from "next/link"
 import { useToast } from "@/components/Toast"
 import FolderDropZone from "@/components/FolderDropZone"
+import StorageIndicator from "@/components/StorageIndicator"
 
 export default function ProjectPage({ params }) {
     const resolvedParams = use(params)
@@ -564,12 +565,25 @@ export default function ProjectPage({ params }) {
                             }
                         } else {
                             console.error('Upload failed with status:', xhr.status, xhr.responseText)
+
+                            let errorMessage = `Server error: ${xhr.status}`
+
+                            // Handle specific error types
+                            if (xhr.status === 413) {
+                                try {
+                                    const errorData = JSON.parse(xhr.responseText)
+                                    errorMessage = errorData.title || 'Storage limit exceeded'
+                                } catch (e) {
+                                    errorMessage = 'Storage limit exceeded'
+                                }
+                            }
+
                             setUploadProgress(prev =>
                                 prev.map(p =>
                                     p.id === fileId ? {
                                         ...p,
                                         status: 'error',
-                                        error: `Server error: ${xhr.status}`
+                                        error: errorMessage
                                     } : p
                                 )
                             )
@@ -882,6 +896,11 @@ export default function ProjectPage({ params }) {
             </header>
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Storage Indicator */}
+                <div className="mb-6">
+                    <StorageIndicator compact={true} />
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                     {/* Folders Sidebar */}
                     <div className="lg:col-span-1">
@@ -1169,6 +1188,8 @@ export default function ProjectPage({ params }) {
                     onClose={() => setShowNewFolderModal(false)}
                     onFolderCreated={(newFolder) => {
                         setFolders([...folders, newFolder])
+                        setSelectedFolder(newFolder)
+                        fetchFiles(newFolder.id)
                         setShowNewFolderModal(false)
                     }}
                 />

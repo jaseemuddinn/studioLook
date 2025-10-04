@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { connectToDatabase, Folder, Project, File } from "@/lib/db"
 import { uploadToS3 } from "@/lib/s3"
+import { checkBatchStorageLimit, addToStorageUsage, getStorageLimitMessage } from "@/lib/storage"
 import sharp from "sharp"
 import path from "path"
 
@@ -9,7 +10,7 @@ export async function POST(request) {
     try {
         const session = await auth()
 
-        if (!session?.user || session.user.role !== "PHOTOGRAPHER") {
+        if (!session?.user || (session.user.role !== "PHOTOGRAPHER" && session.user.role !== "ALL_FEATURES")) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
@@ -42,6 +43,28 @@ export async function POST(request) {
         const project = await Project.findById(folder.projectId).lean()
         if (!project || project.ownerId.toString() !== session.user.id) {
             return NextResponse.json({ message: "Forbidden" }, { status: 403 })
+        }
+
+        // Check storage limits before processing
+        const fileSizes = files.filter(file => file && typeof file !== "string").map(file => file.size)
+        const storageCheck = await checkBatchStorageLimit(session.user.id, fileSizes)
+
+        if (!storageCheck.hasSpace) {
+            const errorMessage = getStorageLimitMessage(storageCheck)
+            return NextResponse.json(
+                {
+                    message: errorMessage.message,
+                    title: errorMessage.title,
+                    suggestion: errorMessage.suggestion,
+                    storageInfo: {
+                        used: storageCheck.currentUsage,
+                        limit: storageCheck.limit,
+                        remaining: storageCheck.remaining,
+                        needed: storageCheck.additionalSize
+                    }
+                },
+                { status: 413 } // Payload Too Large
+            )
         }
 
         const uploadedFiles = []
@@ -116,8 +139,12 @@ export async function POST(request) {
                 thumbnailUrl,  // S3 thumbnail URL
                 folderId,
                 projectId: folder.projectId,
+                userId: session.user.id,
                 position: (lastFile?.position || 0) + 1
             })
+
+            // Update user storage usage
+            await addToStorageUsage(session.user.id, file.size)
 
             uploadedFiles.push({
                 ...savedFile.toObject(),
