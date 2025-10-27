@@ -22,6 +22,7 @@ export default function SharedGallery({ params }) {
 
     useEffect(() => {
         // Only fetch data if user is authenticated
+        
         if (status === "authenticated" && resolvedParams.token) {
             fetchSharedProject()
         } else if (status === "unauthenticated") {
